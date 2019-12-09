@@ -20,9 +20,18 @@ def setProblem(traces):
         for state in trace:
             for predicate in state:
                 predicate_signatures.add((predicate[0], len(predicate)-1))
-                for obj in predicate[1:]:
-                    objects.add(obj)
+                objects.update(predicate[1:])
+    static_predicates = predicate_signatures.copy()
+    for trace in traces:
+        for state, state_next in zip(trace, trace[1:]):
+            changed = state.symmetric_difference(state_next)
+            for predicate in changed:
+                static_predicates.discard((predicate[0], len(predicate)-1))
+    print("Predicate signatures")
     for pred,arity in predicate_signatures:
+        print("{}/{}".format(pred,arity))
+    print("Static predicates")
+    for pred,arity in static_predicates:
         print("{}/{}".format(pred,arity))
     print(objects)
     print(generateAllPredicates(predicate_signatures, objects))

@@ -13,7 +13,7 @@ def generateAllPredicates(predicate_signatures, objects):
     return predicates
 
 
-def setProblem(traces):
+def extractInfo(traces):
     predicate_signatures = set()
     objects = set()
     for trace in traces:
@@ -27,19 +27,21 @@ def setProblem(traces):
             changed = state.symmetric_difference(state_next)
             for predicate in changed:
                 static_predicates.discard((predicate[0], len(predicate)-1))
+    return predicate_signatures, static_predicates, objects
+
+
+def main():
+    from example_traces import traces
+    predicate_signatures, static_predicates, objects = extractInfo(traces)
     print("Predicate signatures")
     for pred,arity in predicate_signatures:
         print("{}/{}".format(pred,arity))
     print("Static predicates")
     for pred,arity in static_predicates:
         print("{}/{}".format(pred,arity))
+
     print(objects)
     print(generateAllPredicates(predicate_signatures, objects))
-
-
-def main():
-    from example_traces import traces
-    setProblem(traces)
 
 
 if __name__ == "__main__":

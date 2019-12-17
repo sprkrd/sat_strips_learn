@@ -30,9 +30,22 @@ def extractInfo(traces):
     return predicate_signatures, static_predicates, objects
 
 
+def solvariable(action_idx, section, predicate, *slots):
+    var_name = "a{:02}_{}_{}".format(action_idx, section, predicate)
+    if slots:
+        var_name += "_" + "_".join("slot{}".format(s) for s in slots)
+    return var_name
+
+
+# def slotvariable(slot_idx, obj, time_step):
+    # return "slot{}_{}_t{:02}".format(slot_idx, obj
+
+
 def setProblem(traces, action_v, timesteps):
     predicate_signatures, static_predicates, objects = extractInfo(traces)
     max_arity = max(action_v)
+
+    # generate solution variables
     solution = []
     for action_idx, action_arity in enumerate(action_v):
         solution.append({})
@@ -46,6 +59,8 @@ def setProblem(traces, action_v, timesteps):
     for action_idx, action in enumerate(solution):
         print("a{:02}:".format(action_idx))
         print("  "+"\n  ".join(sorted(action.keys())))
+
+
 
     # for predicate in generateAllPredicates(predicate_signatures, objects):
         # pass

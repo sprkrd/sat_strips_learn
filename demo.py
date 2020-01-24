@@ -45,6 +45,12 @@ def actvar(action_idx, trace_idx, time_step):
     return "exec_a{:02}_tr{:02}_ts{:02}".format(action_idx, trace_idx, time_step)
 
 
+def statevar(pred, args, trace_idx, time_step):
+    if args:
+        return "{}_{}_tr{:02}_ts{:02}".format(pred, "_".join(args), trace_idx, time_step)
+    return "{}_tr{:02}_ts{:02}".format(pred, trace_idx, time_step)
+
+
 def setProblem(traces, action_v, timesteps):
     predicate_signatures, static_predicates, objects = extractInfo(traces)
     max_arity = max(action_v)
@@ -74,6 +80,16 @@ def setProblem(traces, action_v, timesteps):
         var_name = slotvar(slot_idx, obj, tr, ts)
         slot_variables[var_name] = Bool(var_name)
     print(sorted(slot_variables.keys()))
+
+    # generate state variables (predicates)
+    state_variables = {}
+    for pred, pred_arity in predicate_signatures:
+        for args, ts, tr in product(permutations(objects, pred_arity), range(timesteps), range(len(traces))):
+            var_name = statevar(pred, args, tr, ts)
+            state_variables[var_name] = Bool(var_name)
+
+    print(list(state_variables)[:10])
+
 
     # for section in ("pre", "add"):
         # for (predicate, pred_arity), tr, ts in product(predicate_signatures, range(len(traces)), range(timesteps)):

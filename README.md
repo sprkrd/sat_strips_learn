@@ -18,4 +18,11 @@ git submodule update --init --recursive
 
 More info [here](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
 
+In order for PDDLGym to work with planner support, you must set the
+`FF_PATH` env variable to the path of the Fast Downward executable.
+You can also add the following to your `~/.bashrc`
+
+```
+export FF_PATH=/path/to/ff/executable
+```
 

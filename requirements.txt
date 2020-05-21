@@ -1,0 +1,6 @@
+matplotlib
+pillow
+gym
+imageio
+pyperplan
+z3-solver

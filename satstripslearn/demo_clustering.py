@@ -156,8 +156,8 @@ def cluster(action0, action1):
     for f0 in feat0:
         for f1 in feat1:
             if f0[0] == f1[0]:
-                feat0_potential_matches.get(f0,[]).append(f1)
-                feat1_potential_matches.get(f1,[]).append(f0)
+                feat0_potential_matches.setdefault(f0,[]).append(f1)
+                feat1_potential_matches.setdefault(f1,[]).append(f0)
                 varname = featmatchvar(f0,f1)
                 variables[varname] = Bool(varname)
     for f0 in feat0:
@@ -201,31 +201,51 @@ def cluster(action0, action1):
         if not f1[0].startswith("pre_"):
             constraints.append(variables[takefeatvar(1,f1)])
 
-    for k in variables:
-        print(k)
+    # print("VARIABLES")
+    # for k in variables:
+        # print(k)
 
-    for const in constraints[:100]:
-        print(const)
+    # print("CONSTRAINTS")
+    # for const in constraints:
+        # print(const)
 
     s = Solver()
     s.add(*constraints)
 
-    print(len(variables))
-    print(len(constraints))
-    print(s.check())
+    if s.check() != sat:
+        return None
+
+    model = s.model()
+
+    mapping_from_0_to_1 = {}
+
+    for n0 in nodes0:
+        for n1 in nodes1:
+            var = variables[mapvar(n0,n1)]
+            print(model[var])
+            if model[var]:
+                mapping_from_0_to_1[n0] = n1
+    
+    for k,v in mapping_from_0_to_1.items():
+        print(k, "<->", v)
+
+
+    # print(len(variables))
+    # print(len(constraints))
+    # print(s.check())
     # print(s.model())
 
 
 if __name__ == "__main__":
-    action0 = Action.from_transition(s0, s1)
-    action1 = Action.from_transition(s1, s2)
+    action0 = Action.from_transition(s0, s1, lifted=True)
+    action1 = Action.from_transition(s1, s2, lifted=True)
 
 
 
     print(list(action0.get_features()))
     print(action0)
     print(action1)
-    print(cluster_broadphase(action0, action1))
+    # print(cluster_broadphase(action0, action1))
     cluster(action0, action1)
 
 

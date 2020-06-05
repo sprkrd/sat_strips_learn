@@ -2,7 +2,13 @@
 
 
 from z3 import *
+
+from collections import deque   
 from threading import Lock
+from itertools import product
+
+
+INF = (1<<31)-1
 
 
 s0 = set([("at", "loc-1-1"),
@@ -58,24 +64,70 @@ def lift_atom(atom, ref_dict):
     return (head,*lifted_tail)
 
 
+class DirectedGraph:
+    def __init__(self, nodes, adjacency):
+        self.nodes = nodes
+        self.adjacency = adjacency
+            
+    def bfs(self, startset):
+        openset = deque((0,node) for node in startset)
+        closedset = {}
+        while openset:
+            level,u = openset.popleft()
+            if u not in closedset:
+                closedset[u] = level
+                for v in self.adjacency[u]:
+                    openset.append((level+1, v))
+        return closedset
+        
+    def __str__(self):
+        lines = ["DirectedGraph {"]
+        for u,adjacent in self.adjacency.items():
+            lines.append(f"  {u} -> {', '.join(adjacent)}")
+        lines.append("}")
+        return "\n".join(lines)
+
+
 class Action:
     def __init__(self, name, pre_list, add_list, delete_list):
         self.name = name
         self.pre_list = pre_list
         self.add_list = add_list
         self.delete_list = delete_list
-
-    def get_referenced_objects(self):
-        objects = set()
+        
+    def get_object_graph(self):
+        nodes = self.get_referenced_objects()
+        adjacency = {}
         for f in self.get_features():
-            objects.update(f[1:])
-        return sorted(objects)
+            for u,v in product(f[1:], f[1:]):
+                if u != v:
+                    adjacency.setdefault(u, []).append(v)
+        return DirectedGraph(nodes, adjacency)
+        
+    def get_precondition_scores(self):
+        effect_objects = self.get_referenced_objects(sections=["add", "delete"])
+        object_graph = self.get_object_graph()
+        object_scores = object_graph.bfs(effect_objects)
+        return [min(object_scores[o] for o in f[1:]) for f in self.pre_list]
 
-    def get_features(self):
-        for section in ["pre", "add", "delete"]:
+    def get_referenced_objects(self, sections=None):
+        sections = sections or ["pre", "add", "delete"]
+        objects = set()
+        for f in self.get_features(sections=sections):
+            objects.update(f[1:])
+        return list(objects)
+
+    def get_features(self, sections=None):
+        sections = sections or ["pre", "add", "delete"]
+        for section in sections:
             for head,*tail in getattr(self, f"{section}_list"):
                 yield (f"{section}_{head}",*tail)
 
+    def filter_preconditions(self, max_pre_score):
+        pre_scores = self.get_precondition_scores()
+        name = f"action-{ACT_SEQ_UUID_GEN()}"
+        self.pre_list = [f for s,f in zip(pre_scores, self.pre_list) if s <= max_pre_score]
+     
     def get_effect_label_count(self):
         effect_label_count = {}
         for label,*_ in self.get_features():
@@ -159,17 +211,15 @@ def cluster(action0, action1):
     feat1_potential_matches = {}
 
     variables = {}
-    for n0 in nodes0:
-        for n1 in nodes1:
-            varname = mapvar(n0,n1)
+    for n0,n1 in product(nodes0,nodes1):
+        varname = mapvar(n0,n1)
+        variables[varname] = Bool(varname)
+    for f0,f1 in product(feat0,feat1):
+        if f0[0] == f1[0]:
+            feat0_potential_matches.setdefault(f0,[]).append(f1)
+            feat1_potential_matches.setdefault(f1,[]).append(f0)
+            varname = featmatchvar(f0,f1)
             variables[varname] = Bool(varname)
-    for f0 in feat0:
-        for f1 in feat1:
-            if f0[0] == f1[0]:
-                feat0_potential_matches.setdefault(f0,[]).append(f1)
-                feat1_potential_matches.setdefault(f1,[]).append(f0)
-                varname = featmatchvar(f0,f1)
-                variables[varname] = Bool(varname)
     for f0 in feat0:
         varname = takefeatvar(0,f0)
         variables[varname] = Bool(varname)
@@ -235,13 +285,12 @@ def cluster(action0, action1):
     model = o.model()
 
     mapping_from_0_to_1 = {}
-
-    for n0 in nodes0:
-        for n1 in nodes1:
-            var = variables[mapvar(n0,n1)]
-            print(model[var])
-            if model[var]: # or model[var] is None: (is it needed to check for None?)
-                mapping_from_0_to_1[n0] = n1
+    
+    for n0,n1 in product(nodes0,nodes1):
+        var = variables[mapvar(n0,n1)]
+        print(model[var])
+        if model[var]: # or model[var] is None: (is it needed to check for None?)
+            mapping_from_0_to_1[n0] = n1
     
     for k,v in mapping_from_0_to_1.items():
         print(k, "<->", v)
@@ -256,13 +305,18 @@ def cluster(action0, action1):
 if __name__ == "__main__":
     action0 = Action.from_transition(s0, s1, lifted=False)
     action1 = Action.from_transition(s1, s2, lifted=False)
-
-
-
-    print(list(action0.get_features()))
+    
     print(action0)
-    print(action1)
-    # print(cluster_broadphase(action0, action1))
-    cluster(action0, action1)
+    action0.filter_preconditions(1)
+    print(action0)
+
+
+    # print(list(action0.get_features()))
+    # print(action0)
+    # print(action0.get_object_graph())
+    # print(action0.get_object_graph().bfs(["loc-1-1", "loc-1-2"]))
+    # print(action1)
+    # # print(cluster_broadphase(action0, action1))
+    # cluster(action0, action1)
 
 

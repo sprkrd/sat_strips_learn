@@ -33,7 +33,8 @@ class SequentialUUIDGenerator:
         return uuid
 
 
-SEQ_UUID_GEN = SequentialUUIDGenerator()
+ACT_SEQ_UUID_GEN = SequentialUUIDGenerator()
+VAR_SEQ_UUID_GEN = SequentialUUIDGenerator()
 
 
 def tuple_to_str(t):
@@ -44,9 +45,17 @@ def replace(t, sigma):
     return (t[0],*(sigma.get(a,a) for a in t))
 
 
-def lift_atom(atom):
+def lift_atom(atom, ref_dict):
     head,*tail = atom
-    return (head,*(arg if arg.startswith("?") else "?"+arg for arg in tail))
+    lifted_tail = []
+    for arg in tail:
+        if arg.startswith("?"):
+            lifted_tail.append(arg)
+        else:
+            if arg not in ref_dict:
+                ref_dict[arg] = f"?x{VAR_SEQ_UUID_GEN()}"
+            lifted_tail.append(ref_dict[arg])
+    return (head,*lifted_tail)
 
 
 class Action:
@@ -76,15 +85,16 @@ class Action:
 
     @staticmethod
     def from_transition(s, s_next, lifted=False):
-        name = f"action-{SEQ_UUID_GEN()}"
-        pre = s
-        add_eff = s_next.difference(s)
-        del_eff = s.difference(s_next)
+        name = f"action-{ACT_SEQ_UUID_GEN()}"
+        pre = list(s)
+        add_eff = list(s_next.difference(s))
+        del_eff = list(s.difference(s_next))
         if lifted:
-            pre = map(lift_atom, pre)
-            add_eff = map(lift_atom, add_eff)
-            del_eff = map(lift_atom, del_eff)
-        return Action(name, list(pre), list(add_eff), list(del_eff))
+            ref_dict = {}
+            pre = [lift_atom(a, ref_dict) for a in pre]
+            add_eff = [lift_atom(a,ref_dict) for a in add_eff]
+            del_eff = [lift_atom(a, ref_dict) for a in del_eff]
+        return Action(name, pre, add_eff, del_eff)
 
     def __str__(self):
         name = self.name
@@ -142,7 +152,7 @@ def cluster(action0, action1):
         return None
     feat0 = list(action0.get_features())
     nodes0 = action0.get_referenced_objects()
-    feat1 = list(action0.get_features())
+    feat1 = list(action1.get_features())
     nodes1 = action1.get_referenced_objects()
 
     feat0_potential_matches = {}
@@ -168,6 +178,7 @@ def cluster(action0, action1):
         variables[varname] = Bool(varname)
 
     constraints = []
+    soft_constraints = []
     for n0 in nodes0:
         constraints += amo(*(variables[mapvar(n0,n1)] for n1 in nodes1))
     for n1 in nodes1:
@@ -197,9 +208,13 @@ def cluster(action0, action1):
     for f0 in feat0:
         if not f0[0].startswith("pre_"):
             constraints.append(variables[takefeatvar(0,f0)])
+        else:
+            soft_constraints.append(variables[takefeatvar(0,f0)])
     for f1 in feat1:
         if not f1[0].startswith("pre_"):
             constraints.append(variables[takefeatvar(1,f1)])
+        else:
+            soft_constraints.append(variables[takefeatvar(1,f1)])
 
     # print("VARIABLES")
     # for k in variables:
@@ -209,13 +224,15 @@ def cluster(action0, action1):
     # for const in constraints:
         # print(const)
 
-    s = Solver()
-    s.add(*constraints)
+    o = Optimize()
+    o.add(*constraints)
+    for soft_const in soft_constraints:
+        o.add_soft(soft_const)
 
-    if s.check() != sat:
+    if o.check() != sat:
         return None
 
-    model = s.model()
+    model = o.model()
 
     mapping_from_0_to_1 = {}
 
@@ -223,7 +240,7 @@ def cluster(action0, action1):
         for n1 in nodes1:
             var = variables[mapvar(n0,n1)]
             print(model[var])
-            if model[var]:
+            if model[var]: # or model[var] is None: (is it needed to check for None?)
                 mapping_from_0_to_1[n0] = n1
     
     for k,v in mapping_from_0_to_1.items():
@@ -237,8 +254,8 @@ def cluster(action0, action1):
 
 
 if __name__ == "__main__":
-    action0 = Action.from_transition(s0, s1, lifted=True)
-    action1 = Action.from_transition(s1, s2, lifted=True)
+    action0 = Action.from_transition(s0, s1, lifted=False)
+    action1 = Action.from_transition(s1, s2, lifted=False)
 
 
 

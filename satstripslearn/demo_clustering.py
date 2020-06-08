@@ -45,31 +45,74 @@ VAR_SEQ_UUID_GEN = SequentialUUIDGenerator()
 
 def tuple_to_str(t):
     return f"({' '.join(t)})"
+    
+    
+def replace(t, sigma):
+    return (t[0],*(sigma.get(a,a) for a in t[1:]))
 
 
 def replace(t, sigma):
     return (t[0],*(sigma.get(a,a) for a in t))
 
 
+def is_lifted(obj):
+    return obj.startswith("?")
+
+
 def lift_atom(atom, ref_dict):
     head,*tail = atom
     lifted_tail = []
     for arg in tail:
-        if arg.startswith("?"):
+        if is_lifted(arg):
             lifted_tail.append(arg)
         else:
             if arg not in ref_dict:
                 ref_dict[arg] = f"?x{VAR_SEQ_UUID_GEN()}"
             lifted_tail.append(ref_dict[arg])
     return (head,*lifted_tail)
+    
+    
+def inverse_map(d):
+    inv = {v:k for k,v in d.items()}
+    return inv
 
 
 class DirectedGraph:
+    """
+    Utility class that represents a directed graph.
+    
+    Parameters
+    ----------
+    nodes: list
+        The set of nodes of this graph
+    adjacency: dict
+        A dictionary from nodes u to all the nodes v s.t. there's
+        an edge u->v in the graph
+    """
+
     def __init__(self, nodes, adjacency):
+        """
+        See help(type(self)) for accurate signature.
+        """
         self.nodes = nodes
         self.adjacency = adjacency
             
     def bfs(self, startset):
+        """
+        Breadth First Search to calculate the distance from a set of starting
+        nodes to the rest of nodes in the graph.
+        
+        Parameters
+        ----------
+        startset: any iterable
+            the set of starting nodes
+        
+        Return
+        ------
+        out: dict
+            A dictionary from nodes to the distance to these nodes from the
+            starting set.
+        """
         openset = deque((0,node) for node in startset)
         closedset = {}
         while openset:
@@ -89,13 +132,50 @@ class DirectedGraph:
 
 
 class Action:
-    def __init__(self, name, pre_list, add_list, delete_list):
+    """
+    Represents a STRIPS action. The class presents several utility method to
+    facilitate clustering.
+    
+    Parameters
+    ----------
+    name: str
+        name identifying the action
+    pre_list: list
+        precondition of the action, as list of tuples that represents a conjunction
+        of atoms. Each tuple represents such an atom, which in turn is an instantiated predicate.
+        The first element of the tuple is the name of the predicate, while the rest is the list
+        of arguments names. Arguments with a ? character in front of its name are
+        variables, prone to be substituted during action grounding. This representational
+        convention is the same for the add list and for the delete list.
+    add_list: list
+        add effect of the action, as a list of tuples. See description of pre_list.
+    del_list: list
+        delete effect of the action, as a list of tuples. See description of pre_list.
+    """
+
+    def __init__(self, name, pre_list, add_list, del_list):
+        """
+        See help(type(self)) for accurate signature.
+        """
         self.name = name
         self.pre_list = pre_list
         self.add_list = add_list
-        self.delete_list = delete_list
+        self.del_list = del_list
         
     def get_object_graph(self):
+        """
+        Constructs a directed graph in which the referenced objects act as
+        vertices. Two objects are connected through an edge if they appear together
+        in at least one feature (i.e. an atom from the precondition, the add list or the
+        delete list). This graph gives an idea on how "distant" objects are from each other.
+        
+        Return
+        ------
+        out: DirectedGraph
+            a directed graph G = <V,E> in which V is the set of objects referenced by
+            this action and E is the set of all (u,v) pairs s.t. u,v appear together
+            in at least one atom.
+        """
         nodes = self.get_referenced_objects()
         adjacency = {}
         for f in self.get_features():
@@ -105,34 +185,101 @@ class Action:
         return DirectedGraph(nodes, adjacency)
         
     def get_precondition_scores(self):
-        effect_objects = self.get_referenced_objects(sections=["add", "delete"])
+        """
+        Calculates a score for each atom in the precondition that gives an idea of
+        how "distant" or unrelated they are with respect to the effects.
+        
+        Return
+        ------
+        out: list
+            the list of scores (Int) assigned to the preconditions, in order of
+            appearance. The larger the score, the more unrelated the precondition
+            atom is to the effect.
+        """
+        effect_objects = self.get_referenced_objects(sections=["add", "del"])
         object_graph = self.get_object_graph()
         object_scores = object_graph.bfs(effect_objects)
         return [min(object_scores[o] for o in f[1:]) for f in self.pre_list]
 
     def get_referenced_objects(self, sections=None):
-        sections = sections or ["pre", "add", "delete"]
+        """
+        Objects referenced by this action.
+        
+        Parameters
+        ----------
+        sections: list or None
+            The sections to check for objects.
+        
+        Return
+        ------
+        out: list
+            list of strings, the names of the objects represented by this action.
+        """
+        sections = sections or ["pre", "add", "del"]
         objects = set()
         for f in self.get_features(sections=sections):
             objects.update(f[1:])
         return list(objects)
+        
+    def get_parameters(self):
+        """
+        List of lifted objects referenced by this action (i.e. those that are meant
+        to be substitute by ground objects).
+        
+        Return
+        ------
+        out: list
+            list of strings containing the lifted objects.
+        """
+        # we sort the parameters so there is some canonical ordering
+        parameters = sorted(filter(is_lifted, self.get_referenced_objects()))
+        return parameters
 
     def get_features(self, sections=None):
-        sections = sections or ["pre", "add", "delete"]
+        """
+        Joins together all the atoms present in the precondition, the add list and the
+        delete list, prefixing "pre_", "add_" or "del_", accordingly, to the head of
+        the atom (i.e. the name of the predicate).
+        
+        Parameters
+        ----------
+        sections: list
+            The list of sections to join. If None, all the sections are checked.
+            If a list is provided, it should contain "pre", "add", "del".
+        """
+        sections = sections or ["pre", "add", "del"]
         for section in sections:
             for head,*tail in getattr(self, f"{section}_list"):
                 yield (f"{section}_{head}",*tail)
 
     def filter_preconditions(self, max_pre_score):
+        """
+        Removes from the preconditions all the atoms with a score higher
+        than certain threshold.
+        
+        Parameters
+        ----------
+        max_pre_score: Int
+            Score threshold. Retain atoms whose score is less than or equal to
+            this value.
+        """
         pre_scores = self.get_precondition_scores()
         name = f"action-{ACT_SEQ_UUID_GEN()}"
         self.pre_list = [f for s,f in zip(pre_scores, self.pre_list) if s <= max_pre_score]
      
     def get_effect_label_count(self):
+        """
+        Count the number of occurrences of each predicate in the add and delete lists.
+        
+        Return
+        ------
+        out: dict
+            A dict from string to Int that maps add/delete feature name to
+            the number of occurrences in the effects.
+        """
         effect_label_count = {}
-        for label,*_ in self.get_features():
-            if not label.startswith("pre_"):
-                effect_label_count[label] = effect_label_count.get(label,0) + 1
+        for label,*_ in self.get_features(["add", "del"]):
+            effect_label_count[label] = effect_label_count.get(label,0) + 1
         return effect_label_count
 
     @staticmethod
@@ -152,7 +299,7 @@ class Action:
         name = self.name
         pre_str = ", ".join(map(tuple_to_str, self.pre_list))
         add_str = ", ".join(map(tuple_to_str, self.add_list))
-        del_str = ", ".join(map(tuple_to_str, self.delete_list))
+        del_str = ", ".join(map(tuple_to_str, self.del_list))
         return  "Action {\n"\
                f"  name: {name}\n"\
                f"  precondition: {pre_str}\n"\
@@ -174,6 +321,22 @@ class ActionCluster:
 
 
 def amo(*variables):
+    """
+    Construct a list of SAT clauses in Z3 that represents the "at most once"
+    constraint using the quadratic encoding.
+
+    Parameters
+    ----------
+    *variables: BoolRef
+        a number of Z3 variables of the Boolean sort
+    
+    Return
+    ------
+    out: list
+        a list of Z3 Boolean expressions that, in conjunction, represents
+        that at most one of the given variables can be assigned to True.
+        The size of such list is N*(N-1)/2, where N = len(variables)
+    """
     constraints = []
     for idx, u in enumerate(variables):
         for v in variables[idx+1:]:
@@ -306,9 +469,9 @@ if __name__ == "__main__":
     action0 = Action.from_transition(s0, s1, lifted=False)
     action1 = Action.from_transition(s1, s2, lifted=False)
     
-    print(action0)
-    action0.filter_preconditions(1)
-    print(action0)
+    # print(action0)
+    # action0.filter_preconditions(1)
+    # print(action0)
 
 
     # print(list(action0.get_features()))
@@ -316,7 +479,7 @@ if __name__ == "__main__":
     # print(action0.get_object_graph())
     # print(action0.get_object_graph().bfs(["loc-1-1", "loc-1-2"]))
     # print(action1)
-    # # print(cluster_broadphase(action0, action1))
-    # cluster(action0, action1)
+    print(cluster_broadphase(action0, action1))
+    cluster(action0, action1)
 
 

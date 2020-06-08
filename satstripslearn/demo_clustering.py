@@ -51,10 +51,6 @@ def replace(t, sigma):
     return (t[0],*(sigma.get(a,a) for a in t[1:]))
 
 
-def replace(t, sigma):
-    return (t[0],*(sigma.get(a,a) for a in t))
-
-
 def is_lifted(obj):
     return obj.startswith("?")
 
@@ -162,6 +158,9 @@ class Action:
         self.add_list = add_list
         self.del_list = del_list
         
+    def replace_references(self, sigma):
+        pass
+        
     def get_object_graph(self):
         """
         Constructs a directed graph in which the referenced objects act as
@@ -252,20 +251,33 @@ class Action:
             for head,*tail in getattr(self, f"{section}_list"):
                 yield (f"{section}_{head}",*tail)
 
-    def filter_preconditions(self, max_pre_score):
+    def filter_preconditions(self, max_pre_score, pre_scores=None):
         """
-        Removes from the preconditions all the atoms with a score higher
-        than certain threshold.
+        Computes an new action with the same effect as this one, but with
+        some atoms from the precondition filtered out.
         
         Parameters
         ----------
         max_pre_score: Int
             Score threshold. Retain atoms whose score is less than or equal to
-            this value.
+            this value. See get_precondition_scores to learn more about the scores.
+        pre_scores: list or None
+            Score vector. If the scores have already been calculated via
+            get_precondition_scores, they can be provided here to avoid recomputing them.
+            If None is given, get_precondition_scores is called internally.
+            
+        Return
+        ------
+        out: Action
+            New action with same effects and filtered preconditions.
         """
-        pre_scores = self.get_precondition_scores()
+        pre_scores = pre_scores or self.get_precondition_scores()
         name = f"action-{ACT_SEQ_UUID_GEN()}"
-        self.pre_list = [f for s,f in zip(pre_scores, self.pre_list) if s <= max_pre_score]
+        pre_list = [f for s,f in zip(pre_scores, self.pre_list) if s <= max_pre_score]
+        add_list = self.add_list[:] # copy added atoms
+        del_list = self.del_list[:] # copy deleted atoms
+        return Action(name, pre_list, add_list, del_list)
+        
      
     def get_effect_label_count(self):
         """
@@ -284,6 +296,21 @@ class Action:
 
     @staticmethod
     def from_transition(s, s_next, lifted=False):
+        """
+        Static constructor that takes two states that are interpreted as successive
+        and builds an action that describes the transition.
+        
+        Parameters
+        ----------
+        s: set
+            State represented as a collection of tuples (atom). Each tuple is a fact
+            or fluent that holds in the situation represented by the state.
+        s_next: set
+            State after the transition
+        lifted: Bool
+            If True, then all the objects involved in the transition are lifted. That is,
+            the referenced objects are replaced by a lifted variable of the form ?x[id].
+        """
         name = f"action-{ACT_SEQ_UUID_GEN()}"
         pre = list(s)
         add_eff = list(s_next.difference(s))
@@ -327,7 +354,7 @@ def amo(*variables):
 
     Parameters
     ----------
-    *variables: BoolRef
+    *variables: z3.BoolRef
         a number of Z3 variables of the Boolean sort
     
     Return
@@ -357,8 +384,10 @@ def takefeatvar(action, feat):
 
 
 def cluster_broadphase(action0, action1):
-    """simply compare the number of predicates of each type in the effects of
-    action0 and action1 to make sure that they can be joined"""
+    """
+    Simply compares the number of predicates of each type in the effects of
+    action0 and action1 to make sure that they can be joined
+    """
     return action0.get_effect_label_count() == action1.get_effect_label_count()
 
 

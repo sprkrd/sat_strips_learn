@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
-
 from z3 import *
 
-from collections import deque   
+from collections import deque
 from threading import Lock
 from itertools import product
 
@@ -45,8 +44,8 @@ VAR_SEQ_UUID_GEN = SequentialUUIDGenerator()
 
 def tuple_to_str(t):
     return f"({' '.join(t)})"
-    
-    
+
+
 def replace(t, sigma):
     return (t[0],*(sigma.get(a,a) for a in t[1:]))
 
@@ -66,8 +65,8 @@ def lift_atom(atom, ref_dict):
                 ref_dict[arg] = f"?x{VAR_SEQ_UUID_GEN()}"
             lifted_tail.append(ref_dict[arg])
     return (head,*lifted_tail)
-    
-    
+
+
 def inverse_map(d):
     inv = {v:k for k,v in d.items()}
     return inv
@@ -76,7 +75,7 @@ def inverse_map(d):
 class DirectedGraph:
     """
     Utility class that represents a directed graph.
-    
+
     Parameters
     ----------
     nodes: list
@@ -92,17 +91,17 @@ class DirectedGraph:
         """
         self.nodes = nodes
         self.adjacency = adjacency
-            
+
     def bfs(self, startset):
         """
         Breadth First Search to calculate the distance from a set of starting
         nodes to the rest of nodes in the graph.
-        
+
         Parameters
         ----------
         startset: any iterable
             the set of starting nodes
-        
+
         Return
         ------
         out: dict
@@ -118,7 +117,7 @@ class DirectedGraph:
                 for v in self.adjacency[u]:
                     openset.append((level+1, v))
         return closedset
-        
+
     def __str__(self):
         lines = ["DirectedGraph {"]
         for u,adjacent in self.adjacency.items():
@@ -131,7 +130,7 @@ class Action:
     """
     Represents a STRIPS action. The class presents several utility method to
     facilitate clustering.
-    
+
     Parameters
     ----------
     name: str
@@ -157,17 +156,21 @@ class Action:
         self.pre_list = pre_list
         self.add_list = add_list
         self.del_list = del_list
-        
+
     def replace_references(self, sigma):
-        pass
-        
+        name = f"action-{ACT_SEQ_UUID_GEN()}"
+        pre_list = [replace(a,sigma) for a in self.pre_list]
+        add_list = [replace(a,sigma) for a in self.add_list]
+        del_list = [replace(a,sigma) for a in self.del_list]
+        return Action(name, pre_list, add_list, del_list)
+
     def get_object_graph(self):
         """
         Constructs a directed graph in which the referenced objects act as
         vertices. Two objects are connected through an edge if they appear together
         in at least one feature (i.e. an atom from the precondition, the add list or the
         delete list). This graph gives an idea on how "distant" objects are from each other.
-        
+
         Return
         ------
         out: DirectedGraph
@@ -182,12 +185,12 @@ class Action:
                 if u != v:
                     adjacency.setdefault(u, []).append(v)
         return DirectedGraph(nodes, adjacency)
-        
+
     def get_precondition_scores(self):
         """
         Calculates a score for each atom in the precondition that gives an idea of
         how "distant" or unrelated they are with respect to the effects.
-        
+
         Return
         ------
         out: list
@@ -203,12 +206,12 @@ class Action:
     def get_referenced_objects(self, sections=None):
         """
         Objects referenced by this action.
-        
+
         Parameters
         ----------
         sections: list or None
             The sections to check for objects.
-        
+
         Return
         ------
         out: list
@@ -219,12 +222,12 @@ class Action:
         for f in self.get_features(sections=sections):
             objects.update(f[1:])
         return list(objects)
-        
+
     def get_parameters(self):
         """
         List of lifted objects referenced by this action (i.e. those that are meant
         to be substitute by ground objects).
-        
+
         Return
         ------
         out: list
@@ -239,7 +242,7 @@ class Action:
         Joins together all the atoms present in the precondition, the add list and the
         delete list, prefixing "pre_", "add_" or "del_", accordingly, to the head of
         the atom (i.e. the name of the predicate).
-        
+
         Parameters
         ----------
         sections: list
@@ -255,7 +258,7 @@ class Action:
         """
         Computes an new action with the same effect as this one, but with
         some atoms from the precondition filtered out.
-        
+
         Parameters
         ----------
         max_pre_score: Int
@@ -265,7 +268,7 @@ class Action:
             Score vector. If the scores have already been calculated via
             get_precondition_scores, they can be provided here to avoid recomputing them.
             If None is given, get_precondition_scores is called internally.
-            
+
         Return
         ------
         out: Action
@@ -277,12 +280,12 @@ class Action:
         add_list = self.add_list[:] # copy added atoms
         del_list = self.del_list[:] # copy deleted atoms
         return Action(name, pre_list, add_list, del_list)
-        
-     
+
+
     def get_effect_label_count(self):
         """
         Count the number of occurrences of each predicate in the add and delete lists.
-        
+
         Return
         ------
         out: dict
@@ -299,7 +302,7 @@ class Action:
         """
         Static constructor that takes two states that are interpreted as successive
         and builds an action that describes the transition.
-        
+
         Parameters
         ----------
         s: set
@@ -344,7 +347,7 @@ class ActionCluster:
 
     # def __str__(self):
         # return "ActionCluster {\n"\
-              # f"  
+              # f"
 
 
 def amo(*variables):
@@ -356,7 +359,7 @@ def amo(*variables):
     ----------
     *variables: z3.BoolRef
         a number of Z3 variables of the Boolean sort
-    
+
     Return
     ------
     out: list
@@ -476,17 +479,39 @@ def cluster(action0, action1):
 
     model = o.model()
 
-    mapping_from_0_to_1 = {}
-    
+    # mapping_from_0_to_1 = {}
+    # for n0,n1 in product(nodes0,nodes1):
+    #     var = variables[mapvar(n0,n1)]
+    #     if model[var]: # or model[var] is None: # (is it needed to check for None?)
+    #         mapping_from_0_to_1[n0] = n1
+
+    mapping_from_0_to_new = {}
     for n0,n1 in product(nodes0,nodes1):
         var = variables[mapvar(n0,n1)]
-        print(model[var])
-        if model[var]: # or model[var] is None: (is it needed to check for None?)
-            mapping_from_0_to_1[n0] = n1
-    
-    for k,v in mapping_from_0_to_1.items():
-        print(k, "<->", v)
+        if model[var] and n0 != n1: # or model[var] is None: # (is it needed to check for None?)
+            mapping_from_0_to_new[n0] = f"?x{VAR_SEQ_UUID_GEN()}"
 
+    name = f"action-{ACT_SEQ_UUID_GEN()}"
+    pre_list = []
+    add_list = []
+    del_list = []
+
+    for f0 in feat0:
+        var = variables[takefeatvar(0,f0)]
+        if model[var]:
+            section, atom_name = f0[0].split("_",1)
+            atom = replace((atom_name, *f0[1:]), mapping_from_0_to_new)
+            if section == "pre":
+                pre_list.append(atom)
+            elif section == "add":
+                add_list.append(atom)
+            else: # section == "del"
+                del_list.append(atom)
+    new_action = Action(name, pre_list, add_list, del_list)
+    return new_action
+
+    # for k,v in mapping_from_0_to_1.items():
+    #     print(k, "<->", v)
 
     # print(len(variables))
     # print(len(constraints))
@@ -497,7 +522,10 @@ def cluster(action0, action1):
 if __name__ == "__main__":
     action0 = Action.from_transition(s0, s1, lifted=False)
     action1 = Action.from_transition(s1, s2, lifted=False)
-    
+
+    print(action0)
+    print(action1)
+
     # print(action0)
     # action0.filter_preconditions(1)
     # print(action0)
@@ -508,7 +536,5 @@ if __name__ == "__main__":
     # print(action0.get_object_graph())
     # print(action0.get_object_graph().bfs(["loc-1-1", "loc-1-2"]))
     # print(action1)
-    print(cluster_broadphase(action0, action1))
-    cluster(action0, action1)
-
-
+    # print(cluster_broadphase(action0, action1))
+    print(cluster(action0, action1))

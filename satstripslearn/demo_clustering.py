@@ -11,19 +11,22 @@ INF = (1<<31)-1
 
 
 s0 = set([("at", "loc-1-1"),
-    ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-1", "loc-2-1", "down"),
-    ("adj", "loc-1-2", "loc-1-1", "left"), ("adj", "loc-1-2", "loc-2-2", "down"),
-    ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-2-1", "loc-2-2", "right")])
+    ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-2", "loc-1-1", "left"),
+    ("adj", "loc-1-2", "loc-2-2", "down"), ("adj", "loc-2-2", "loc-1-2", "up"),
+    ("adj", "loc-2-2", "loc-2-1", "left"), ("adj", "loc-2-1", "loc-2-2", "right"),
+    ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-1-1", "loc-2-1", "down")])
 
 s1 = set([("at", "loc-1-2"),
-    ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-1", "loc-2-1", "down"),
-    ("adj", "loc-1-2", "loc-1-1", "left"), ("adj", "loc-1-2", "loc-2-2", "down"),
-    ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-2-1", "loc-2-2", "right")])
+    ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-2", "loc-1-1", "left"),
+    ("adj", "loc-1-2", "loc-2-2", "down"), ("adj", "loc-2-2", "loc-1-2", "up"),
+    ("adj", "loc-2-2", "loc-2-1", "left"), ("adj", "loc-2-1", "loc-2-2", "right"),
+    ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-1-1", "loc-2-1", "down")])
 
 s2 = set([("at", "loc-2-2"),
-    ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-1", "loc-2-1", "down"),
-    ("adj", "loc-1-2", "loc-1-1", "left"), ("adj", "loc-1-2", "loc-2-2", "down"),
-    ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-2-1", "loc-2-2", "right")])
+    ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-2", "loc-1-1", "left"),
+    ("adj", "loc-1-2", "loc-2-2", "down"), ("adj", "loc-2-2", "loc-1-2", "up"),
+    ("adj", "loc-2-2", "loc-2-1", "left"), ("adj", "loc-2-1", "loc-2-2", "right"),
+    ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-1-1", "loc-2-1", "down")])
 
 
 class SequentialUUIDGenerator:
@@ -481,9 +484,11 @@ def cluster(action0, action1):
 
     # mapping_from_0_to_1 = {}
     # for n0,n1 in product(nodes0,nodes1):
-    #     var = variables[mapvar(n0,n1)]
-    #     if model[var]: # or model[var] is None: # (is it needed to check for None?)
-    #         mapping_from_0_to_1[n0] = n1
+        # var = variables[mapvar(n0,n1)]
+        # if model[var]: # or model[var] is None: # (is it needed to check for None?)
+            # mapping_from_0_to_1[n0] = n1
+    # for k,v in mapping_from_0_to_1.items():
+        # print(k, "<->", v)
 
     mapping_from_0_to_new = {}
     for n0,n1 in product(nodes0,nodes1):
@@ -509,9 +514,6 @@ def cluster(action0, action1):
                 del_list.append(atom)
     new_action = Action(name, pre_list, add_list, del_list)
     return new_action
-
-    # for k,v in mapping_from_0_to_1.items():
-    #     print(k, "<->", v)
 
     # print(len(variables))
     # print(len(constraints))

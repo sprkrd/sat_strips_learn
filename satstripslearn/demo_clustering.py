@@ -330,11 +330,13 @@ class Action:
 
     def __str__(self):
         name = self.name
+        par_str = " ".join(self.get_parameters())
         pre_str = ", ".join(map(tuple_to_str, self.pre_list))
         add_str = ", ".join(map(tuple_to_str, self.add_list))
         del_str = ", ".join(map(tuple_to_str, self.del_list))
         return  "Action {\n"\
                f"  name: {name}\n"\
+               f"  parameters: {par_str}\n"\
                f"  precondition: {pre_str}\n"\
                f"  add list: {add_str}\n"\
                f"  del list: {del_str}\n"\

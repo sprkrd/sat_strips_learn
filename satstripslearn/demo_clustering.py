@@ -328,6 +328,18 @@ class Action:
             del_eff = [lift_atom(a, ref_dict) for a in del_eff]
         return Action(name, pre, add_eff, del_eff)
 
+    def to_pddl(self):
+        name = self.name
+        par_str = " ".join(self.get_parameters())
+        pre_str = " ".join(map(tuple_to_str, self.pre_list))
+        add_str = " ".join(map(tuple_to_str, self.add_list))
+        del_str = ")(not ".join(map(tuple_to_str, self.del_list))
+        return  f"(:action {name}\n"\
+               f"  parameters: ({par_str})\n"\
+               f"  precondition: (and {pre_str})\n"\
+               f"  effect: (and {add_str} (not {del_str}) )\n"\
+                ")"
+    	
     def __str__(self):
         name = self.name
         par_str = " ".join(self.get_parameters())
@@ -484,13 +496,13 @@ def cluster(action0, action1):
 
     model = o.model()
 
-    # mapping_from_0_to_1 = {}
-    # for n0,n1 in product(nodes0,nodes1):
-        # var = variables[mapvar(n0,n1)]
-        # if model[var]: # or model[var] is None: # (is it needed to check for None?)
-            # mapping_from_0_to_1[n0] = n1
-    # for k,v in mapping_from_0_to_1.items():
-        # print(k, "<->", v)
+    mapping_from_0_to_1 = {}
+    for n0,n1 in product(nodes0,nodes1):
+        var = variables[mapvar(n0,n1)]
+        if model[var]: # or model[var] is None: # (is it needed to check for None?)
+            mapping_from_0_to_1[n0] = n1
+    for k,v in mapping_from_0_to_1.items():
+        print(k, "<->", v)
 
     mapping_from_0_to_new = {}
     for n0,n1 in product(nodes0,nodes1):
@@ -527,8 +539,8 @@ if __name__ == "__main__":
     action0 = Action.from_transition(s0, s1, lifted=False)
     action1 = Action.from_transition(s1, s2, lifted=False)
 
-    print(action0)
-    print(action1)
+    print(action0.to_pddl())
+    print(action1.to_pddl())
 
     # print(action0)
     # action0.filter_preconditions(1)
@@ -541,4 +553,4 @@ if __name__ == "__main__":
     # print(action0.get_object_graph().bfs(["loc-1-1", "loc-1-2"]))
     # print(action1)
     # print(cluster_broadphase(action0, action1))
-    print(cluster(action0, action1))
+    print(cluster(action0, action1).to_pddl())

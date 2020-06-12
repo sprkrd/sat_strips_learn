@@ -354,6 +354,17 @@ class Action:
                f"  del list: {del_str}\n"\
                 "}"
 
+    def to_pddl(self):
+        name = self.name
+        par_str = " ".join(self.get_parameters())
+        pre_str = " ".join(map(tuple_to_str, self.pre_list))
+        add_str = " ".join(map(tuple_to_str, self.add_list))
+        del_str = ")(not ".join(map(tuple_to_str, self.del_list))
+        return f"(:action {name}\n"\
+               f"  parameters: ({par_str})\n"\
+               f"  precondition: (and {pre_str})\n"\
+               f"  effect: (and {add_str} (not {del_str}) )\n"\
+                ")"
 
 class ActionCluster:
     def __init__(self, action_result, child0, child1, cluster_score):

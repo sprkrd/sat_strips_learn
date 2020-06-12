@@ -28,6 +28,18 @@ s2 = set([("at", "loc-2-2"),
     ("adj", "loc-2-2", "loc-2-1", "left"), ("adj", "loc-2-1", "loc-2-2", "right"),
     ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-1-1", "loc-2-1", "down")])
 
+s3 = set([("at", "loc-2-1"),
+    ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-2", "loc-1-1", "left"),
+    ("adj", "loc-1-2", "loc-2-2", "down"), ("adj", "loc-2-2", "loc-1-2", "up"),
+    ("adj", "loc-2-2", "loc-2-1", "left"), ("adj", "loc-2-1", "loc-2-2", "right"),
+    ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-1-1", "loc-2-1", "down")])
+
+s4 = set([("at", "loc-2-2"),
+    ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-2", "loc-1-1", "left"),
+    ("adj", "loc-1-2", "loc-2-2", "down"), ("adj", "loc-2-2", "loc-1-2", "up"),
+    ("adj", "loc-2-2", "loc-2-1", "left"), ("adj", "loc-2-1", "loc-2-2", "right"),
+    ("adj", "loc-2-1", "loc-1-1", "up"), ("adj", "loc-1-1", "loc-2-1", "down")])
+
 
 class SequentialUUIDGenerator:
     def __init__(self):
@@ -383,6 +395,10 @@ def mapvar(n0,n1):
     return f"m({n0},{n1})"
 
 
+def used(action,n):
+    return f"used{action}({n})"
+
+
 def featmatchvar(feat0, feat1):
     return f"match({tuple_to_str(feat0)},{tuple_to_str(feat1)})"
 
@@ -411,6 +427,12 @@ def cluster(action0, action1):
     feat1_potential_matches = {}
 
     variables = {}
+    for n0 in nodes0:
+        varname = used(0,n0)
+        variables[varname] = Bool(varname)
+    for n1 in nodes1:
+        varname = used(1,n1)
+        variables[varname] = Bool(varname)
     for n0,n1 in product(nodes0,nodes1):
         varname = mapvar(n0,n1)
         variables[varname] = Bool(varname)
@@ -431,8 +453,24 @@ def cluster(action0, action1):
     soft_constraints = []
     for n0 in nodes0:
         constraints += amo(*(variables[mapvar(n0,n1)] for n1 in nodes1))
+        # rhs = []
+        # for n1 in nodes1:
+            # var = variables[mapvar(n0,n1)]
+            # rhs.append(var)
+        # rhs = Or(*rhs)
+        # used_var = variables[used(0,n0)]
+        # constraints.append(used_var == rhs)
+        # soft_constraints.append((Not(used_var), "B"))
     for n1 in nodes1:
         constraints += amo(*(variables[mapvar(n0,n1)] for n0 in nodes0))
+        # rhs = []
+        # for n0 in nodes0:
+            # var = variables[mapvar(n0,n1)]
+            # rhs.append(var)
+        # rhs = Or(*rhs)
+        # used_var = variables[used(1,n1)]
+        # constraints.append(used_var == rhs)
+        # soft_constraints.append((Not(used_var), "B"))
     for f0 in feat0:
         for f1 in feat0_potential_matches.get(f0, []):
             lhs = variables[featmatchvar(f0,f1)]
@@ -459,12 +497,33 @@ def cluster(action0, action1):
         if not f0[0].startswith("pre_"):
             constraints.append(variables[takefeatvar(0,f0)])
         else:
-            soft_constraints.append(variables[takefeatvar(0,f0)])
+            soft_constraints.append((variables[takefeatvar(0,f0)],"A"))
     for f1 in feat1:
         if not f1[0].startswith("pre_"):
             constraints.append(variables[takefeatvar(1,f1)])
         else:
-            soft_constraints.append(variables[takefeatvar(1,f1)])
+            soft_constraints.append((variables[takefeatvar(1,f1)],"A"))
+
+    # for n0 in nodes0:
+        # # constraints += amo(*(variables[mapvar(n0,n1)] for n1 in nodes1))
+        # rhs = []
+        # for n1 in nodes1:
+            # var = variables[mapvar(n0,n1)]
+            # rhs.append(var)
+        # rhs = Or(*rhs)
+        # used_var = variables[used(0,n0)]
+        # constraints.append(used_var == rhs)
+        # soft_constraints.append((Not(used_var), "B"))
+    # for n1 in nodes1:
+        # # constraints += amo(*(variables[mapvar(n0,n1)] for n0 in nodes0))
+        # rhs = []
+        # for n0 in nodes0:
+            # var = variables[mapvar(n0,n1)]
+            # rhs.append(var)
+        # rhs = Or(*rhs)
+        # used_var = variables[used(1,n1)]
+        # constraints.append(used_var == rhs)
+        # soft_constraints.append((Not(used_var), "B"))
 
     # print("VARIABLES")
     # for k in variables:
@@ -476,7 +535,7 @@ def cluster(action0, action1):
 
     o = Optimize()
     o.add(*constraints)
-    for soft_const in soft_constraints:
+    for soft_const, lab in soft_constraints:
         o.add_soft(soft_const)
 
     if o.check() != sat:
@@ -484,13 +543,13 @@ def cluster(action0, action1):
 
     model = o.model()
 
-    # mapping_from_0_to_1 = {}
-    # for n0,n1 in product(nodes0,nodes1):
-        # var = variables[mapvar(n0,n1)]
-        # if model[var]: # or model[var] is None: # (is it needed to check for None?)
-            # mapping_from_0_to_1[n0] = n1
-    # for k,v in mapping_from_0_to_1.items():
-        # print(k, "<->", v)
+    mapping_from_0_to_1 = {}
+    for n0,n1 in product(nodes0,nodes1):
+        var = variables[mapvar(n0,n1)]
+        if model[var]: # or model[var] is None: # (is it needed to check for None?)
+            mapping_from_0_to_1[n0] = n1
+    for k,v in mapping_from_0_to_1.items():
+        print(k, "<->", v)
 
     mapping_from_0_to_new = {}
     for n0,n1 in product(nodes0,nodes1):
@@ -524,12 +583,44 @@ def cluster(action0, action1):
 
 
 if __name__ == "__main__":
-    action0 = Action.from_transition(s0, s1, lifted=False)
-    action1 = Action.from_transition(s1, s2, lifted=False)
+    # action0 = Action.from_transition(s0, s1, lifted=False)
+    # action1 = Action.from_transition(s3, s4, lifted=False)
 
+    # # action0 = action0.filter_preconditions(0)
+    # # action1 = action1.filter_preconditions(0)
+
+    # print(action0)
+    # print(action1)
+
+    # # print(action0)
+    # # action0.filter_preconditions(1)
+    # # print(action0)
+
+
+    # # print(list(action0.get_features()))
+    # # print(action0)
+    # # print(action0.get_object_graph())
+    # # print(action0.get_object_graph().bfs(["loc-1-1", "loc-1-2"]))
+    # # print(action1)
+    # # print(cluster_broadphase(action0, action1))
+    # print(cluster(action0, action1))
+    action0 = Action.from_transition(s0, s1, lifted=False)#.filter_preconditions(0)
+    action1 = Action.from_transition(s1, s2, lifted=False)#.filter_preconditions(0)
+    action2 = Action.from_transition(s2, s1, lifted=False)#.filter_preconditions(0)
+    action3 = Action.from_transition(s1, s0, lifted=False)#.filter_preconditions(0)
     print(action0)
     print(action1)
-
+    print("--------------")
+    cluster_0_1 = cluster(action0, action1)
+    print(cluster_0_1)
+    print(action2)
+    print("--------------")
+    cluster_2_3 = cluster(action2, cluster_0_1)
+    print(cluster_2_3)
+    print(action3)
+    print("--------------")
+    cluster_4_5 = cluster(action3, cluster_2_3)
+    print(cluster_4_5)
     # print(action0)
     # action0.filter_preconditions(1)
     # print(action0)
@@ -541,4 +632,6 @@ if __name__ == "__main__":
     # print(action0.get_object_graph().bfs(["loc-1-1", "loc-1-2"]))
     # print(action1)
     # print(cluster_broadphase(action0, action1))
-    print(cluster(action0, action1))
+    # print(cluster(action0, action1))
+    # print(cluster(cluster(action0,action1),action2))
+    # print(cluster(cluster(cluster(action0,action1),action2),action3))

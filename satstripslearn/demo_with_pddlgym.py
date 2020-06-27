@@ -26,7 +26,7 @@ def get_type_predicates(env):
     return type_preds
 
 
-def run_random_agent_demo(env, outdir='/tmp', max_num_steps=10, fps=3, 
+def run_random_agent_demo(env, outdir='/tmp', max_num_steps=20, fps=3, 
                           verbose=False, seed=None):
     if outdir is None:
         outdir = "/tmp/{}".format(env_cls.__name__)

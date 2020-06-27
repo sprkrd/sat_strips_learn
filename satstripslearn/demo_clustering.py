@@ -5,6 +5,7 @@ from .action import Action
 from .cluster_z3 import cluster
 
 
+
 s0 = set([("at", "loc-1-1"),
     ("adj", "loc-1-1", "loc-1-2", "right"), ("adj", "loc-1-2", "loc-1-1", "left"),
     ("adj", "loc-1-2", "loc-2-2", "down"), ("adj", "loc-2-2", "loc-1-2", "up"),

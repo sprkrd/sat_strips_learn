@@ -233,3 +233,16 @@ class Action:
                f"  precondition: (and {pre_str})\n"\
                f"  effect: (and {add_str} (not {del_str}) )\n"\
                 ")"
+
+
+class ActionCluster:
+    def __init__(self, left, right, merged, distance):
+        self.left = left
+        self.right = right
+        self.merged = merged
+        self.distance = distance
+
+    @property
+    def name(self):
+        return self.merged.name
+

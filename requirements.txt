@@ -5,4 +5,8 @@ imageio
 pyperplan
 z3-solver
 jinja2
+graphviz
+ipython
+ipykernel
+
 

@@ -22,9 +22,12 @@ class Action:
         add effect of the action, as a list of tuples. See description of pre_list.
     del_list: list
         delete effect of the action, as a list of tuples. See description of pre_list.
+    up: ActionCluster
+        should this action be the result of merging two actions, this parameter must point
+        to the cluster that represents this union (see ActionCluster).
     """
 
-    def __init__(self, name, pre_list, add_list, del_list):
+    def __init__(self, name, pre_list, add_list, del_list, up=None):
         """
         See help(type(self)) for accurate signature.
         """
@@ -32,6 +35,7 @@ class Action:
         self.pre_list = pre_list
         self.add_list = add_list
         self.del_list = del_list
+        self.up = up
 
     def replace_references(self, sigma):
         name = action_id_gen()
@@ -236,13 +240,24 @@ class Action:
 
 
 class ActionCluster:
-    def __init__(self, left, right, merged, distance):
+    """
+    Represents the union of two actions.
+
+    Parameters
+    ----------
+    left: Action
+        first action in the merging operation
+    right: Action
+        second action in the merging operation
+    down: Action
+        result of the union
+    distance: numeric (i.e. int, float)
+        score that measures how distant left is from right
+    """
+
+    def __init__(self, left, right, down, distance):
         self.left = left
         self.right = right
-        self.merged = merged
+        self.down = down
         self.distance = distance
-
-    @property
-    def name(self):
-        return self.merged.name
 

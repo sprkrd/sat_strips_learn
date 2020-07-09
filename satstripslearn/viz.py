@@ -137,7 +137,8 @@ def format_atom_list(section, atom_list, atom_limit=1000, line_len=40):
 
 
 def draw_action_node(g, action, atom_limit=1000, line_len=40, highlight=False):
-    label = ACTION_NODE_TMP.format(action_name=action.name,
+    label = ACTION_NODE_TMP.format(
+        action_name=action.name,
         border=4 if highlight else 1,
         action_params=" ".join(action.get_parameters()),
         action_pre=format_atom_list("pre", action.pre_list, atom_limit=atom_limit, line_len=line_len),
@@ -151,12 +152,12 @@ def draw_cluster_node(g, cluster):
     g.node(cluster.name, label=label)
 
 
-def draw_cluster_graph(top_actions, line_len=30, atom_limit_top=1000, atom_limit_middle=2, highlight_top=True):
+def draw_cluster_graph(top_actions, line_len=30, atom_limit_top=1000, atom_limit_middle=2,
+        highlight_top=True, bottom_top=True):
     g = gv.Graph("g")
-    g.attr(rankidr="TB")
+    g.attr(rankdir="BT" if bottom_top else "TB")
     flat_actions, flat_clusters = flatten(top_actions)
     middle_actions = [act for act in flat_actions if act not in top_actions]
-    print(flat_actions, flat_clusters)
     g.attr("node", **ACTION_NODE_STYLE)
     with g.subgraph() as s:
         s.attr(rank="same")

@@ -2,7 +2,7 @@ from itertools import product
 
 from z3 import *
 
-from .action import Action
+from .action import Action, ActionCluster
 from .utils import *
 
 
@@ -167,5 +167,6 @@ def cluster(action0, action1):
             else: # section == "del"
                 del_list.append(atom)
     new_action = Action(name, pre_list, add_list, del_list)
+    new_cluster = ActionCluster(action0, action1, new_action, 0)
+    new_action.up = new_cluster
     return new_action
-

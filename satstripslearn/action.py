@@ -106,7 +106,7 @@ class Action:
     def get_parameters(self):
         """
         List of lifted objects referenced by this action (i.e. those that are meant
-        to be substitute by ground objects).
+        to be substituted by ground objects).
 
         Return
         ------
@@ -256,8 +256,8 @@ class ActionCluster:
     """
 
     def __init__(self, left, right, down, distance):
+        self.name = cluster_id_gen()
         self.left = left
         self.right = right
         self.down = down
         self.distance = distance
-

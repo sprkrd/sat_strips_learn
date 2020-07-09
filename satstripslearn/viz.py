@@ -5,20 +5,26 @@ from .action import Action, ActionCluster
 
 
 ACTION_NODE_STYLE = {
-    "style": "filled, bold",
-    "penwidth": "1",
-    "fillcolor": "white",
     "fontname": "sans",
     "shape": "none",
-    "margin": "0"
+    "margin": "0",
+    "fontcolor": "black"
+}
+
+
+CLUSTER_NODE_STYLE = {
+    "fontname": "sans",
+    "shape": "none",
+    "margin": "0",
+    "fontcolor": "white",
 }
 
 
 ACTION_NODE_TMP = \
-    '<<table style="rounded" border="1" cellborder="0" cellspacing="4" cellpadding="3">'\
+    '<<table bgcolor="white" style="rounded" border="{border}" cellborder="0" cellspacing="4" cellpadding="3">'\
         '<tr>'\
-            '<td style="rounded" cellpadding="3" align="center" bgcolor="black">'\
-                '<font color="white">{action_name}</font>'\
+            '<td style="rounded" align="center" bgcolor="black">'\
+                '<font color="white"><b>{action_name}</b></font>'\
             '</td>'\
         '</tr>'\
         '<tr>'\
@@ -28,17 +34,32 @@ ACTION_NODE_TMP = \
         '</tr>'\
         '<tr>'\
             '<td valign="top" align="left" balign="left">'\
-                '<b>pre:</b> {action_pre}'\
+                '{action_pre}'\
             '</td>'\
         '</tr>'\
         '<tr>'\
             '<td valign="top" align="left" balign="left">'\
-                '<b>add:</b> {action_add}'\
+                '{action_add}'\
             '</td>'\
         '</tr>'\
         '<tr>'\
             '<td valign="top" align="left" balign="left">'\
-                '<b>del:</b> {action_del}'\
+                '{action_del}'\
+            '</td>'\
+        '</tr>'\
+    '</table>>'
+
+
+CLUSTER_NODE_TMP = \
+    '<<table bgcolor="black" style="rounded" border="0" cellborder="0" cellspacing="4" cellpadding="3">'\
+        '<tr>'\
+            '<td style="rounded" align="center">'\
+                '<b>{cluster_name}</b>'\
+            '</td>'\
+        '</tr>'\
+        '<tr>'\
+            '<td style="rounded" align="left">'\
+                '<b>dist.:</b> {cluster_distance}'\
             '</td>'\
         '</tr>'\
     '</table>>'
@@ -61,10 +82,6 @@ def flatten(actions):
     flat_actions.sort(key=lambda a: a.name)
     flat_clusters.sort(key=lambda c: c.down.name)
     return flat_actions, flat_clusters
-
-
-def draw_action_node(g, action):
-    pass
 
 
 def _wrap_text_count_chars(word, inside_tag=False):
@@ -100,40 +117,76 @@ def wrap_text(text, max_length=72):
     return "<br/>".join(wrapped_lines)
 
 
-def build_cluster_graph(actions):
+def quantified_name(singular_form, qty, plural_form=None):
+    plural_form = plural_form or singular_form+"s"
+    return f"{qty} {singular_form if qty == 1 else plural_form}"
+
+
+def format_atom_list(section, atom_list, atom_limit=1000, line_len=40):
+    text = f"<b>{section}:</b> "
+    if not atom_list:
+        text += "&lt;<i>empty</i>&gt;"
+    elif atom_limit > 0:
+        text += " ".join(f"({';;'.join(atom)})" for atom in atom_list[:atom_limit])
+        if atom_limit < len(atom_list):
+            text += f" &lt;<i>{len(atom_list) - atom_limit};;more</i>&gt;"
+    else:
+        text = f"<b>{section}:</b> &lt;<i>{quantified_name('atom', len(atom_list))}</i>&gt;"
+    wrapped_text = wrap_text(text, max_length=line_len).replace(";;", " ")
+    return wrapped_text
+
+
+def draw_action_node(g, action, atom_limit=1000, line_len=40, highlight=False):
+    label = ACTION_NODE_TMP.format(action_name=action.name,
+        border=4 if highlight else 1,
+        action_params=" ".join(action.get_parameters()),
+        action_pre=format_atom_list("pre", action.pre_list, atom_limit=atom_limit, line_len=line_len),
+        action_add=format_atom_list("add", action.add_list, atom_limit=atom_limit, line_len=line_len),
+        action_del=format_atom_list("del", action.del_list, atom_limit=atom_limit, line_len=line_len))
+    g.node(action.name, label=label)
+
+
+def draw_cluster_node(g, cluster):
+    label = CLUSTER_NODE_TMP.format(cluster_name=cluster.name, cluster_distance=cluster.distance)
+    g.node(cluster.name, label=label)
+
+
+def draw_cluster_graph(top_actions, line_len=30, atom_limit_top=1000, atom_limit_middle=2, highlight_top=True):
     g = gv.Graph("g")
+    g.attr(rankidr="TB")
+    flat_actions, flat_clusters = flatten(top_actions)
+    middle_actions = [act for act in flat_actions if act not in top_actions]
+    print(flat_actions, flat_clusters)
     g.attr("node", **ACTION_NODE_STYLE)
-    g.node("node1", label=ACTION_NODE_TMP.format(action_name="action-1",
-        action_params="?x ?y", action_pre="(p ?x ?y)",
-        action_add="(q ?x)<br/>(q ?x)<br/>(q;?x)", action_del="(r ?y)"))
-    # g.attr(rankdir="BT")
-    # all_actions = flatten_actions(actions)
-    # print(all_actions)
-    # for act in all_actions:
-        # g.node(act.name, label=act.name)
-    # for act in all_actions:
-        # if isinstance(act, ActionCluster):
-            # g.edge(act.left.name, act.name)
-            # g.edge(act.right.name, act.name)
+    with g.subgraph() as s:
+        s.attr(rank="same")
+        for action in top_actions:
+            draw_action_node(s, action, atom_limit=atom_limit_top, line_len=line_len, highlight=highlight_top)
+    for action in middle_actions:
+        draw_action_node(g, action, atom_limit=atom_limit_middle, line_len=line_len)
+    g.attr("node", **CLUSTER_NODE_STYLE)
+    for cluster in flat_clusters:
+        draw_cluster_node(g, cluster)
+    for action in flat_actions:
+        if action.up:
+            g.edge(action.up.name, action.name)
+    for cluster in flat_clusters:
+        g.edge(cluster.left.name, cluster.name)
+        g.edge(cluster.right.name, cluster.name)
     return g
 
 
 if __name__ == "__main__":
-    text = "p(?x,?y); q(?x); r(); <asdfjdjsfdasdfadhfadskfjahkdsf>s(?asd,?dyf)</asdjkfhakjsdhfkajhsdfjhskjf>"
-    wrapped = wrap_text(text, 42)
-    print(text)
-    print(wrapped)
-#    action1 = Action("action-1", [], [], [])
-#    action2 = Action("action-2", [], [], [])
-#    action3 = Action("action-3", [], [], [])
-#    action4 = Action("action-4", [], [], [])
-#    action5 = Action("action-5", [], [], [])
-#    action6 = Action("action-6", [], [], [])
-#    action7 = Action("action-7", [], [], [])
-#    action8 = ActionCluster(action2, action3, action4, 0)
-#    action9 = ActionCluster(action8, action5, action6, 0)
-#    actions = [action1, action7, action9]
-
-    g = build_cluster_graph([])
-    g.render("g.gv", view=True)
-
+   action1 = Action("action-1", [], [], [])
+   action2 = Action("action-2", [], [], [])
+   action3 = Action("action-3", [], [], [])
+   action4 = Action("action-4", [], [], [])
+   action5 = Action("action-5", [], [], [])
+   action6 = Action("action-6", [], [], [])
+   cluster1 = ActionCluster(action1, action2, action3, 0)
+   cluster2 = ActionCluster(action3, action4, action5, 0)
+   action3.up = cluster1
+   action5.up = cluster2
+   actions = [action5, action6]
+   g = draw_cluster_graph(actions)
+   g.render("g.gv", view=True)

@@ -16,6 +16,7 @@ class SequentialIdGenerator:
 
 action_id_gen = SequentialIdGenerator("action-")
 variable_id_gen = SequentialIdGenerator("?x")
+cluster_id_gen = SequentialIdGenerator("cluster-")
 
 
 def tuple_to_str(t):
@@ -46,4 +47,3 @@ def lift_atom(atom, ref_dict):
 def inverse_map(d):
     inv = {v:k for k,v in d.items()}
     return inv
-

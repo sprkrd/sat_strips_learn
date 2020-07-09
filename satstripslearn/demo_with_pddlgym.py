@@ -16,6 +16,7 @@ from pddlgym.utils import VideoWrapper
 
 from .action import Action
 from .cluster_z3 import cluster
+from .viz import draw_cluster_graph
 
 
 def ensure_folder_exists(path):
@@ -72,7 +73,7 @@ def record_transition(prv, nxt, actions, output_folder="out"):
             print(a.to_pddl(), file=f)
 
 
-def run_random_agent_demo(env, outdir="out", max_num_steps=20, fps=3, 
+def run_random_agent_demo(env, outdir="out", max_num_steps=20, fps=3,
                           verbose=False, seed=None):
 
     if os.path.exists(outdir):
@@ -106,7 +107,7 @@ def run_random_agent_demo(env, outdir="out", max_num_steps=20, fps=3,
     for t in range(max_num_steps):
         if verbose:
             print("Obs:", obs)
-    
+
         action = env.action_space.sample()
         if verbose:
             print("Act:", action)
@@ -127,6 +128,8 @@ def run_random_agent_demo(env, outdir="out", max_num_steps=20, fps=3,
         print("Final obs:", obs)
         print()
     env.close()
+    g = draw_cluster_graph(actions)
+    g.render("g.gv", format="png", cleanup=True, view=True)
 
 
 def demo_random(env_name, render=True, problem_index=0, verbose=True):
@@ -156,4 +159,3 @@ states = demo_random("blocks_operator_actions", verbose=False)
     # print("-------- Current action repertoire (transition {trans}) --------")
     # for a in actions:
         # print(a)
-

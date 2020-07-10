@@ -16,8 +16,8 @@ class State:
         it) that are known for sure.
     uncertain_atoms: set
         Same structure as atoms, but these are not guaranteed to be true. It
-        is assumed that the len(atoms&uncertain_atoms) = 0 or, in other words,
-        a fact cannot be known and uncertain at the same time, so the caller
+        is assumed that the atoms and uncertain_atoms are disjoint sets, because
+        a fact cannot be known and unknown at the same time. The caller
         is responsible to enforce this.
     """
 

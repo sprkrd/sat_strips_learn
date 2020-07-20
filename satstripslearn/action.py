@@ -27,15 +27,18 @@ class Action:
         to the cluster that represents this union (see ActionCluster).
     """
 
-    def __init__(self, name, pre_list, add_list, del_list, up=None):
+    def __init__(self, name, features):
         """
         See help(type(self)) for accurate signature.
         """
         self.name = name
-        self.pre_list = pre_list
-        self.add_list = add_list
-        self.del_list = del_list
+        self.features = features
         self.up = up
+
+    def filter_features(self, feature_type=None, certainty=None):
+        feature_type = feature_type or ["pre", "del", "add"]
+        certainty = certainty or [False, True]
+        return [feat for feat in self.features if feat.feature_type in feature_type and feat.certain in certainty]    
 
     def replace_references(self, sigma):
         name = action_id_gen()

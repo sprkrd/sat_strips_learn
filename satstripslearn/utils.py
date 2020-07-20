@@ -14,6 +14,22 @@ class SequentialIdGenerator:
         return f"{self._prefix}{next_id}"
 
 
+class Feature:
+    def __init__(self, atom, certain=True, feature_type=None):
+        self.atom = (head,*args)
+        self.certain = certain
+        self.feature_type = feature_type
+
+    def replace(self, sigma):
+        return Feature(replace(self.atom, sigma), self.certain, self.feature_type)
+
+    def __str__(self):
+        return f"({' '.join(self.atom)}, certain={self.certain}, type={self.feature_type})"
+
+    def __repr__(self):
+        return f"Feature({str(self)})"
+
+
 action_id_gen = SequentialIdGenerator("action-")
 variable_id_gen = SequentialIdGenerator("?x")
 cluster_id_gen = SequentialIdGenerator("cluster-")
@@ -47,3 +63,4 @@ def lift_atom(atom, ref_dict):
 def inverse_map(d):
     inv = {v:k for k,v in d.items()}
     return inv
+

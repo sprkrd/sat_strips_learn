@@ -135,6 +135,10 @@ def cluster(action0, action1):
         return None
 
     model = o.model()
+    print(model)
+    objectives = o.objectives()[0]
+    #objectives = model.eval(o.objectives()[0])
+    print(objectives)
 
     mapping_from_0_to_1 = {}
     for n0,n1 in product(nodes0,nodes1):

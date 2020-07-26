@@ -1,5 +1,6 @@
 from .undirected_graph import UndirectedGraph
 from .utils import *
+from .features import *
 
 
 class Action:
@@ -35,10 +36,16 @@ class Action:
         self.features = features
         self.up = up
 
+    def get_grouped_features(self):
+        grouped = {feat_type: [] for feat_type in FEATURE_TYPES}
+        for feat in self.features:
+            grouped[feat.feature_type].append(feat)
+        return grouped
+
     def filter_features(self, feature_type=None, certainty=None):
         feature_type = feature_type or ["pre", "del", "add"]
         certainty = certainty or [False, True]
-        return [feat for feat in self.features if feat.feature_type in feature_type and feat.certain in certainty]    
+        return [feat for feat in self.features if feat.feature_type in feature_type and feat.certain in certainty]
 
     def replace_references(self, sigma):
         name = action_id_gen()

@@ -1,6 +1,8 @@
+# Author: Alejandro S.H.
+
 from .undirected_graph import UndirectedGraph
 from .utils import *
-from .features import *
+from .feature import *
 
 
 class Action:
@@ -28,24 +30,68 @@ class Action:
         to the cluster that represents this union (see ActionCluster).
     """
 
-    def __init__(self, name, features):
+    def __init__(self, name, features, up=None):
         """
         See help(type(self)) for accurate signature.
         """
         self.name = name
         self.features = features
         self.up = up
+        self._cached_grouped_features = {feat_type: [] for feat_type in FEATURE_TYPES}
+        for idx, feat in enumerate(features):
+            self._cached_grouped_features[feat.feature_type].append((idx, feat))
 
     def get_grouped_features(self):
-        grouped = {feat_type: [] for feat_type in FEATURE_TYPES}
-        for feat in self.features:
-            grouped[feat.feature_type].append(feat)
-        return grouped
+        """
+        Returns features grouped by feature type and enumerated according to
+        their position in self.features.
 
-    def filter_features(self, feature_type=None, certainty=None):
-        feature_type = feature_type or ["pre", "del", "add"]
-        certainty = certainty or [False, True]
-        return [feat for feat in self.features if feat.feature_type in feature_type and feat.certain in certainty]
+        Returns
+        -------
+        grouped_features : dict
+            A dict from feature types (str) to lists. The lists contains
+            (Int, Feature) tuples. The Int is the position in which the feature
+            appears in self.features (so it can be used to uniquely identify
+            the feature within this action).
+        """
+        return self._cached_grouped_features
+
+    def get_referenced_objects(self, feature_types=None):
+        """
+        Extracts the list of objects referenced by this action.
+
+        Parameters
+        ----------
+        feature_types : list or None
+            A (sub)set of FEATURE_TYPES, the features where the method must look
+            into in the search for objects.
+
+        Returns
+        -------
+        objects : list
+            List of strings, the names of the objects represented by this action.
+        """
+        feature_types = feature_types or FEATURE_TYPES
+        grouped_features = self.get_grouped_features()
+        objects = set()
+        for feat_type in feature_types:
+            for _, feat in grouped_features[feat_type]:
+                objects.update(feat.arguments)
+        return list(objects)
+
+    def get_parameters(self):
+        """
+        List of lifted objects referenced by this action (i.e. those that are meant
+        to be substituted by constants when instantiating the action).
+
+        Returns
+        -------
+        parameters : list
+            list of strings containing the lifted objects.
+        """
+        # we sort the parameters so there is some canonical ordering
+        parameters = sorted(filter(is_lifted, self.get_referenced_objects()))
+        return parameters
 
     def replace_references(self, sigma):
         name = action_id_gen()
@@ -56,23 +102,23 @@ class Action:
 
     def get_object_graph(self):
         """
-        Constructs a directed graph in which the referenced objects act as
+        Constructs an undirected graph in which the referenced objects act as
         vertices. Two objects are connected through an edge if they appear together
-        in at least one feature (i.e. an atom from the precondition, the add list or the
+        in at least one predicate (i.e. an atom from the precondition, the add list or the
         delete list). This graph gives an idea on how "distant" objects are from each other.
 
-        Return
-        ------
-        out: UndirectedGraph
+        Returns
+        -------
+        out : UndirectedGraph
             an udirected graph G = <V,E> in which V is the set of objects referenced by
             this action and E is the set of all (u,v) pairs s.t. u,v appear together
             in at least one atom.
         """
         nodes = self.get_referenced_objects()
         edges = []
-        for f in self.get_features():
-            for idx,u in enumerate(f[1:], 1):
-                for v in f[idx+1:]:
+        for feat in self.features:
+            for idx,u in enumerate(feat.arguments):
+                for v in feat.arguments[idx+1:]:
                     edges.append((u,v))
         return UndirectedGraph(nodes, edges)
 
@@ -92,57 +138,6 @@ class Action:
         object_graph = self.get_object_graph()
         object_scores = object_graph.bfs(effect_objects)
         return [min(object_scores[o] for o in f[1:]) for f in self.pre_list]
-
-    def get_referenced_objects(self, sections=None):
-        """
-        Objects referenced by this action.
-
-        Parameters
-        ----------
-        sections: list or None
-            The sections to check for objects.
-
-        Return
-        ------
-        out: list
-            list of strings, the names of the objects represented by this action.
-        """
-        sections = sections or ["pre", "add", "del"]
-        objects = set()
-        for f in self.get_features(sections=sections):
-            objects.update(f[1:])
-        return list(objects)
-
-    def get_parameters(self):
-        """
-        List of lifted objects referenced by this action (i.e. those that are meant
-        to be substituted by ground objects).
-
-        Return
-        ------
-        out: list
-            list of strings containing the lifted objects.
-        """
-        # we sort the parameters so there is some canonical ordering
-        parameters = sorted(filter(is_lifted, self.get_referenced_objects()))
-        return parameters
-
-    def get_features(self, sections=None):
-        """
-        Joins together all the atoms present in the precondition, the add list and the
-        delete list, prefixing "pre_", "add_" or "del_", accordingly, to the head of
-        the atom (i.e. the name of the predicate).
-
-        Parameters
-        ----------
-        sections: list
-            The list of sections to join. If None, all the sections are checked.
-            If a list is provided, it should contain "pre", "add", "del".
-        """
-        sections = sections or ["pre", "add", "del"]
-        for section in sections:
-            for head,*tail in getattr(self, f"{section}_list"):
-                yield (f"{section}_{head}",*tail)
 
     def filter_preconditions(self, max_pre_score, pre_scores=None):
         """
@@ -224,28 +219,39 @@ class Action:
 
     def __str__(self):
         name = self.name
-        par_str = " ".join(self.get_parameters())
-        pre_str = ", ".join(map(tuple_to_str, self.pre_list))
-        add_str = ", ".join(map(tuple_to_str, self.add_list))
-        del_str = ", ".join(map(tuple_to_str, self.del_list))
-        return  "Action {\n"\
-               f"  name: {name}\n"\
-               f"  parameters: {par_str}\n"\
-               f"  precondition: {pre_str}\n"\
-               f"  add list: {add_str}\n"\
-               f"  del list: {del_str}\n"\
+        grouped_features = self.get_grouped_features()
+        par_str = ", ".join(self.get_parameters())
+        pre_str = ", ".join(atom_to_str(feat.atom)+("" if feat.certain else "*")
+            for _,feat in grouped_features["pre"])
+        add_str = ", ".join(atom_to_str(feat.atom)+("" if feat.certain else "*")
+            for _,feat in grouped_features["add"])
+        del_str = ", ".join(atom_to_str(feat.atom)+("" if feat.certain else "*")
+            for _,feat in grouped_features["del"])
+        return  "Action{\n"\
+               f"  name = {name},\n"\
+               f"  parameters = [{par_str}],\n"\
+               f"  precondition = [{pre_str}],\n"\
+               f"  add list = [{add_str}],\n"\
+               f"  del list = [{del_str}]\n"\
                 "}"
 
-    def to_pddl(self):
+    def __repr__(self):
+        return f"Action{{name={self.name}, {len(self.features)} features}}"
+
+    def to_pddl(self, include_uncertain=True):
         name = self.name
+        grouped_features = self.get_grouped_features()
         par_str = " ".join(self.get_parameters())
-        pre_str = " ".join(map(tuple_to_str, self.pre_list))
-        add_str = " ".join(map(tuple_to_str, self.add_list))
-        del_str = ")(not ".join(map(tuple_to_str, self.del_list))
+        pre_str = " ".join(atom_to_pddl(feat.atom)
+            for _,feat in grouped_features["pre"] if feat.certain or include_uncertain)
+        add_str = " ".join(atom_to_pddl(feat.atom)
+            for _,feat in grouped_features["add"] if feat.certain or include_uncertain)
+        del_str = " ".join("(not "+atom_to_pddl(feat.atom)+")"
+            for _,feat in grouped_features["del"] if feat.certain or include_uncertain)
         return f"(:action {name}\n"\
                f"  parameters: ({par_str})\n"\
                f"  precondition: (and {pre_str})\n"\
-               f"  effect: (and {add_str} (not {del_str}) )\n"\
+               f"  effect: (and {add_str} {del_str})\n"\
                 ")"
 
 
@@ -271,3 +277,18 @@ class ActionCluster:
         self.right = right
         self.down = down
         self.distance = distance
+
+
+if __name__ == "__main__":
+    pick = Action("pick", [
+        Feature(("ontable", "?x"), feature_type="pre"),
+        Feature(("clear", "?x"), feature_type="pre"),
+        Feature(("handempty",), feature_type="pre"),
+        Feature(("ontable", "?x", "?y"), feature_type="del"),
+        Feature(("handempty",), feature_type="del"),
+        Feature(("clear", "?x"), feature_type="del", certain=False),
+        Feature(("holding", "?x"), feature_type="add")])
+    print(pick)
+    print(pick.to_pddl())
+    print(pick.to_pddl(False))
+    print(pick.get_object_graph())

@@ -129,14 +129,14 @@ def run_random_agent_demo(env, outdir="out", max_num_steps=20, fps=3,
         print()
     env.close()
     g = draw_cluster_graph(actions)
-    g.render("g.gv", format="png", cleanup=True, view=True)
+    g.render("g.gv", format="pdf", cleanup=True, view=True)
 
 
 def demo_random(env_name, render=True, problem_index=0, verbose=True):
     env = gym.make("PDDLEnv{}-v0".format(env_name.capitalize()))
     if not render: env._render = None
     env.fix_problem_index(problem_index)
-    return run_random_agent_demo(env, verbose=verbose, seed=0)
+    return run_random_agent_demo(env, verbose=verbose, seed=5, max_num_steps=4)
 
 
 states = demo_random("blocks_operator_actions", verbose=False)

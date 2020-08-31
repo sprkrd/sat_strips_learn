@@ -1,5 +1,7 @@
 from collections import deque
 
+from .utils import INF
+
 
 class UndirectedGraph:
     """
@@ -36,9 +38,9 @@ class UndirectedGraph:
         startset: any iterable
             the set of starting nodes
 
-        Return
-        ------
-        out: dict
+        Returns
+        -------
+        out : dict
             A dictionary from nodes to the distance to these nodes from the
             starting set.
         """
@@ -50,12 +52,13 @@ class UndirectedGraph:
                 closedset[u] = level
                 for v in self.adjacency[u]:
                     openset.append((level+1, v))
+        for node in self.nodes:
+            closedset.setdefault(node, INF)
         return closedset
 
     def __str__(self):
-        lines = ["UndirectedGraph {"]
+        lines = ["UndirectedGraph{"]
         for u,adjacent in self.adjacency.items():
             lines.append(f"  {u} -> {', '.join(adjacent)}")
         lines.append("}")
         return "\n".join(lines)
-

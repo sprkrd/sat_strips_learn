@@ -1,6 +1,9 @@
 from threading import Lock
 
 
+INF = float('inf')
+
+
 class SequentialIdGenerator:
     def __init__(self, prefix=""):
         self._count = 0
@@ -19,9 +22,11 @@ variable_id_gen = SequentialIdGenerator("?x")
 cluster_id_gen = SequentialIdGenerator("cluster-")
 
 
-def tuple_to_str(t):
+def atom_to_pddl(t):
     return f"({' '.join(t)})"
 
+def atom_to_str(t):
+    return f"{t[0]}({','.join(t[1:])})"
 
 def replace(t, sigma):
     return (t[0],*(sigma.get(a,a) for a in t[1:]))

@@ -1,6 +1,7 @@
 from collections import deque
 
-from .utils import INF
+
+INF = float('inf')
 
 
 class UndirectedGraph:
@@ -9,11 +10,12 @@ class UndirectedGraph:
 
     Parameters
     ----------
-    nodes: list
+    nodes : list
         The set of nodes of this graph
-    edges: iterable
+    edges : iterable
         a sequence of tuples (u,v) that represent the edges of the graph. This
-        sequence must be clean of duplicates.
+        sequence must be clean of duplicates. Bear in mind that (u,v) and (v,u)
+        represent the same edge.
     """
 
     def __init__(self, nodes, edges):
@@ -58,7 +60,7 @@ class UndirectedGraph:
 
     def __str__(self):
         lines = ["UndirectedGraph{"]
-        for u,adjacent in self.adjacency.items():
-            lines.append(f"  {u} -> {', '.join(adjacent)}")
+        for u,adjacent_nodes in self.adjacency.items():
+            lines.append(f"  {u} -> {', '.join(adjacent_nodes)}")
         lines.append("}")
         return "\n".join(lines)

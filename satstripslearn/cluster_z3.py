@@ -6,33 +6,23 @@ from .action import Action, ActionCluster
 from .utils import *
 
 
-def mapvar(n0,n1):
-    return f"m({n0},{n1})"
+def varname(name, *indices):
+    return "_".join((name,*(str(i) for i in indices)))
 
 
-def used(action,n):
-    return f"used{action}({n})"
-
-
-def featmatchvar(feat0, feat1):
-    return f"match({tuple_to_str(feat0)},{tuple_to_str(feat1)})"
-
-
-def takefeatvar(action, feat):
-    return f"take{action}({tuple_to_str(feat)})"
-
-
-def amo(*variables):
+def amo(variables):
     """
     Construct a list of SAT clauses in Z3 that represents the "at most once"
     constraint using the quadratic encoding.
+
     Parameters
     ----------
-    *variables: z3.BoolRef
-        a number of Z3 variables of the Boolean sort
-    Return
-    ------
-    out: list
+    variables : list
+        a number of Z3 variables of the Boolean sort (z3.BoolRef, more specifically)
+
+    Returns
+    -------
+    out : list
         a list of Z3 Boolean expressions that, in conjunction, represents
         that at most one of the given variables can be assigned to True.
         The size of such list is N*(N-1)/2, where N = len(variables)
@@ -44,133 +34,196 @@ def amo(*variables):
     return constraints
 
 
-def cluster(action0, action1):
-    if not action0.cluster_broadphase(action1):
+def cluster(left, right, include_additional_info=False):
+    # TODO this function is a bit too long! At some point we should break it into
+    # smaller chunks.
+
+    timer = Timer()
+
+    if not left.cluster_broadphase(right):
         return None
-    feat0 = list(action0.get_features())
-    nodes0 = action0.get_referenced_objects()
-    feat1 = list(action1.get_features())
-    nodes1 = action1.get_referenced_objects()
 
-    feat0_potential_matches = {}
-    feat1_potential_matches = {}
+    objects_left = left.get_referenced_objects()
+    objects_right = right.get_referenced_objects()
 
-    variables = {}
-    for n0,n1 in product(nodes0,nodes1):
-        varname = mapvar(n0,n1)
-        variables[varname] = Bool(varname)
-    for f0,f1 in product(feat0,feat1):
-        if f0[0] == f1[0]:
-            feat0_potential_matches.setdefault(f0,[]).append(f1)
-            feat1_potential_matches.setdefault(f1,[]).append(f0)
-            varname = featmatchvar(f0,f1)
-            variables[varname] = Bool(varname)
-    for f0 in feat0:
-        varname = takefeatvar(0,f0)
-        variables[varname] = Bool(varname)
-    for f1 in feat1:
-        varname = takefeatvar(1,f1)
-        variables[varname] = Bool(varname)
+    W_soft_preserve = min(len(objects_left), len(objects_right)) + 1
 
-    constraints = []
+    grouped_features_left = left.get_grouped_features()
+    grouped_features_right = right.get_grouped_features()
+
+    #############
+    # VARIABLES #
+    #############
+
+    # It's not necessary to create all the variables beforehand, but's it's nice
+    # to have them indexed in a dict for reference. Maybe we will need this
+    # at some point?
+
+    variables = {} # index of variables
+
+    # some cached data for speeding up the generation of the constraints later.
+    feat_left_potential_matches = {}
+    feat_right_potential_matches = {}
+
+    hard_preserve_left = []
+    hard_preserve_right = []
+    soft_preserve_left = []
+    soft_preserve_right = []
+
+    # Create x variables (relations between objects in left and objects in right)
+    for obj_l, obj_r in product(objects_left, objects_right):
+        x_l_r = varname("x", obj_l, obj_r)
+        variables[x_l_r] = Bool(x_l_r)
+
+    # Create y variables (relations between features in left and features in right)
+    # and identify which features can be matched
+    for feature_type, features_left in grouped_features_left.items():
+        features_right = grouped_features_right[feature_type]
+        for (l,feat_left), (r,feat_right) in product(features_left, features_right):
+            if feat_left.head == feat_right.head:
+                feat_left_potential_matches.setdefault(l,[]).append(r)
+                feat_right_potential_matches.setdefault(r,[]).append(l)
+                y_l_r = varname("y", l, r)
+                variables[y_l_r] = Bool(y_l_r)
+
+    # Create z variables, which are preservation variables. Identify which are
+    # needed to be true, and which are needed to be false
+    for i, feat in enumerate(left.features):
+        if feat.feature_type == "pre" or not feat.certain:
+            soft_preserve_left.append(i)
+        else:
+            hard_preserve_left.append(i)
+        z_0_i = varname("z", 0, i)
+        variables[z_0_i] = Bool(z_0_i)
+    for i, feat in enumerate(right.features):
+        if feat.feature_type == "pre" or not feat.certain:
+            soft_preserve_right.append(i)
+        else:
+            hard_preserve_right.append(i)
+        z_1_i = varname("z", 1, i)
+        variables[z_1_i] = Bool(z_1_i)
+
+    ###############
+    # CONSTRAINTS #
+    ###############
+
+    hard_constraints = []
     soft_constraints = []
 
-    # nodes cannot be matched to more than one node from the other action (hard)
-    for n0 in nodes0:
-        constraints += amo(*(variables[mapvar(n0,n1)] for n1 in nodes1))
-    for n1 in nodes1:
-        constraints += amo(*(variables[mapvar(n0,n1)] for n0 in nodes0))
+    # (H1) partial injective mapping
+    for obj_l in objects_left:
+        hard_constraints += amo([variables[varname("x", obj_l, obj_r)]
+            for obj_r in objects_right])
+    for obj_r in objects_right:
+        hard_constraints += amo([variables[varname("x", obj_l, obj_r)]
+            for obj_l in objects_left])
 
-    # two features match iff there is a map between the objects represented
-    # in said features (hard)
-    for f0 in feat0:
-        for f1 in feat0_potential_matches.get(f0, []):
-            lhs = variables[featmatchvar(f0,f1)]
+    # (H2) Features match iff arguments match
+    for l, potential_matches in feat_left_potential_matches.items():
+        for r in potential_matches:
+            feat_l = left.features[l]
+            feat_r = right.features[r]
+            lhs = variables[varname("y", l, r)]
             rhs = []
-            for n0,n1 in zip(f0[1:],f1[1:]):
-                rhs.append(variables[mapvar(n0,n1)])
+            for obj_l, obj_r in zip(feat_l.arguments, feat_r.arguments):
+                rhs.append(variables[varname("x", obj_l, obj_r)])
             rhs = And(*rhs)
-            constraints.append(lhs == rhs)
+            hard_constraints.append(lhs == rhs)
 
-    # a feature is taken iff there is at least one match for it (hard)
-    for f0 in feat0:
-        lhs = variables[takefeatvar(0,f0)]
+    # (H3) A feature is preserved iff is matched with at least another feature
+    for l in range(len(left.features)):
+        lhs = variables[varname("z", 0, l)]
         rhs = []
-        for f1 in feat0_potential_matches.get(f0, []):
-            rhs.append(variables[featmatchvar(f0,f1)])
+        for r in feat_left_potential_matches.get(l, []):
+            rhs.append(variables[varname("y", l, r)])
         rhs = Or(*rhs)
-        constraints.append(lhs == rhs)
-    for f1 in feat1:
-        lhs = variables[takefeatvar(1,f1)]
+        hard_constraints.append(lhs == rhs)
+    for r in range(len(right.features)):
+        lhs = variables[varname("z", 1, r)]
         rhs = []
-        for f0 in feat1_potential_matches.get(f1, []):
-            rhs.append(variables[featmatchvar(f0,f1)])
+        for l in feat_right_potential_matches.get(r, []):
+            rhs.append(variables[varname("y", l, r)])
         rhs = Or(*rhs)
-        constraints.append(lhs == rhs)
+        hard_constraints.append(lhs == rhs)
 
-    # try to match the least possible amount of nodes with different name (soft)
-    for n0,n1 in product(nodes0,nodes1):
-        if n0 != n1:
-            soft_constraints.append( (Not(variables[mapvar(n0,n1)]),1) )
+    # (H4) All "sure" effects are preserved
+    for l in hard_preserve_left:
+        hard_constraints.append(variables[varname("z", 0, l)])
+    for r in hard_preserve_right:
+        hard_constraints.append(variables[varname("z", 1, r)])
 
-    # take all effect features (hard)/take as many pre features as possible (soft)
-    W_large = len(nodes0)*len(nodes1)
-    for f0 in feat0:
-        if not f0[0].startswith("pre_"):
-            constraints.append(variables[takefeatvar(0,f0)])
-        else:
-            soft_constraints.append( (variables[takefeatvar(0,f0)], W_large) )
-    for f1 in feat1:
-        if not f1[0].startswith("pre_"):
-            constraints.append(variables[takefeatvar(1,f1)])
-        else:
-            soft_constraints.append( (variables[takefeatvar(1,f1)], W_large) )
+    # (S1) Try not to match constants with different name (a.k.a. avoid lifting)
+    for obj_l, obj_r in product(objects_left, objects_right):
+        if not is_lifted(obj_l) and not is_lifted(obj_r) and obj_l!=obj_r:
+            soft_const = Not(variables[varname("x", obj_l, obj_r)])
+            soft_constraints.append( (1, soft_const) )
+
+    # (S2) Try to preserve predicates and uncertain effects
+    for l in soft_preserve_left:
+        soft_const = variables[varname("z", 0, l)]
+        soft_constraints.append( (W_soft_preserve, soft_const) )
+    for r in soft_preserve_right:
+        soft_const = variables[varname("z", 1, r)]
+        soft_constraints.append( (W_soft_preserve, soft_const) )
 
     o = Optimize()
-    o.add(*constraints)
-    for soft_const in soft_constraints:
-        o.add_soft(*soft_const)
+    o.add(*hard_constraints)
+    for weight, soft_const in soft_constraints:
+        o.add_soft(soft_const, weight)
 
     if o.check() != sat:
         return None
 
     model = o.model()
-    print(model)
     objectives = o.objectives()[0]
-    #objectives = model.eval(o.objectives()[0])
-    print(objectives)
+    dist = model.eval(o.objectives()[0]).as_long() / W_soft_preserve
 
-    mapping_from_0_to_1 = {}
-    for n0,n1 in product(nodes0,nodes1):
-        var = variables[mapvar(n0,n1)]
-        if model[var]: # or model[var] is None: # (is it needed to check for None?)
-            mapping_from_0_to_1[n0] = n1
-    for k,v in mapping_from_0_to_1.items():
-        print(k, "<->", v)
-
-    mapping_from_0_to_new = {}
-    for n0,n1 in product(nodes0,nodes1):
-        var = variables[mapvar(n0,n1)]
-        if model[var] and n0 != n1: # or model[var] is None: # (is it needed to check for None?)
-            mapping_from_0_to_new[n0] = variable_id_gen()
-
-    name = action_id_gen()
-    pre_list = []
-    add_list = []
-    del_list = []
-
-    for f0 in feat0:
-        var = variables[takefeatvar(0,f0)]
+    sigma_left = {}
+    sigma_right = {}
+    for obj_l, obj_r in product(objects_left, objects_right):
+        var = variables[varname("x", obj_l, obj_r)]
         if model[var]:
-            section, atom_name = f0[0].split("_",1)
-            atom = replace((atom_name, *f0[1:]), mapping_from_0_to_new)
-            if section == "pre":
-                pre_list.append(atom)
-            elif section == "add":
-                add_list.append(atom)
-            else: # section == "del"
-                del_list.append(atom)
-    new_action = Action(name, pre_list, add_list, del_list)
-    new_cluster = ActionCluster(action0, action1, new_action, 0)
-    new_action.up = new_cluster
-    return new_action
+            if is_lifted(obj_l):
+                obj_u = obj_l
+            elif is_lifted(obj_r):
+                obj_u = obj_r
+            else:
+                obj_u = variable_id_gen()
+            sigma_left[obj_l] = obj_u
+            sigma_right[obj_r] = obj_u
+
+    features_u = []
+    for l, feat_l in enumerate(left.features):
+        preserved_var = variables[varname("z", 0, l)]
+        if not model[preserved_var]:
+            continue
+        for r in feat_left_potential_matches[l]:
+            related_var = variables[varname("y", l, r)]
+            if model[related_var]:
+                feat_r = right.features[r]
+                feat_u = feat_l.replace(sigma_left)
+                feat_u.certain = feat_l.certain or feat_r.certain
+                features_u.append(feat_u)
+
+    cluster = ActionCluster(left, right, dist)
+    name_u = action_id_gen()
+    action_u = Action(name_u, features_u, parent=cluster)
+
+    if include_additional_info:
+        additional_info = {}
+        elapsed_cpu, elapsed_wall = timer.toc()
+        additional_info["elapsed_cpu_ms"] = round(elapsed_cpu*1000)
+        additional_info["elapsed_wall_ms"] = round(elapsed_wall*1000)
+        tau = {}
+        for obj_l, obj_r in product(objects_left, objects_right):
+            var = variables[varname("x", obj_l, obj_r)]
+            if model[var]:
+                tau[obj_l] = obj_r
+        additional_info["tau"] = tau
+        additional_info["sigma_left"] = sigma_left
+        additional_info["sigma_right"] = sigma_right
+        z3_stats = {k.replace(" ","_"): try_parse_number(v) for k,v in o.statistics()}
+        additional_info["z3_stats"] = z3_stats
+        cluster.additional_info = additional_info
+
+    return action_u

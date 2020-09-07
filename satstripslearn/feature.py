@@ -5,7 +5,7 @@ This module defines the Feature class and supporting variable(s).
 """
 
 
-from .utils import replace, atom_to_str
+from .utils import replace, lift_atom, atom_to_str
 
 
 FEATURE_TYPES = ["pre", "add", "del"]
@@ -55,16 +55,16 @@ class Feature:
 
     Example
     -------
-    >>> Feature(("on", "?x", "a"), certain=True, feature_type="pre")
-    Feature{atom=on(?x,a), certain=True, feature_type=pre}
-    >>> Feature(("on", "?x", "a"), certain=True, feature_type="pro")
+    >>> Feature(("on", "X", "a"), certain=True, feature_type="pre")
+    Feature{atom=on(X,a), certain=True, feature_type=pre}
+    >>> Feature(("on", "X", "a"), certain=True, feature_type="pro")
     Traceback (most recent call last):
         ...
     ValueError: Unrecognized feature type: pro. The available types are defined in FEATURE_TYPES.
     """
     def __init__(self, atom, certain=True, feature_type="pre"):
         """
-        See help(type(self))
+        See help(type(self)).
         """
         if feature_type not in FEATURE_TYPES:
             raise ValueError(f"Unrecognized feature type: {feature_type}. "
@@ -129,18 +129,29 @@ class Feature:
 
         Example
         -------
-        >>> f = Feature(("on", "?x", "?y"), certain=False, feature_type="add")
-        >>> sigma = {"?x": "a", "?y": "b"}
+        >>> f = Feature(("on", "X", "Y"), certain=False, feature_type="add")
+        >>> sigma = {"X": "a", "Y": "b"}
         >>> f.replace(sigma)
         Feature{atom=on(a,b), certain=False, feature_type=add}
         """
         return Feature(replace(self.atom, sigma), self.certain, self.feature_type)
 
+    def lift_atom(self, ref_dict):
+        self.atom = lift_atom(self.atom, ref_dict)
+
+    def __hash__(self):
+        return hash((self.atom,self.feature_type,self.certain))
+
+    def __eq__(self, other):
+        return (self.atom,self.feature_type,self.certain) == (other.atom,other.feature_type,other.certain)
+
     def __str__(self):
-        return f"{{atom={atom_to_str(self.atom)}, certain={self.certain}, feature_type={self.feature_type}}}"
+        ret = atom_to_str(self.atom)
+        if not self.certain: ret += "?"
+        return ret
 
     def __repr__(self):
-        return f"Feature{str(self)}"
+        return f"Feature{{atom={atom_to_str(self.atom)}, certain={self.certain}, feature_type={self.feature_type}}}"
 
 
 if __name__ == "__main__":

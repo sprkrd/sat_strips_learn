@@ -67,20 +67,16 @@ CLUSTER_NODE_TMP = \
 
 def flatten(actions):
     flat_actions = []
-    flat_clusters = []
     stack = actions[:]
     while stack:
         item = stack.pop()
         if isinstance(item, Action):
             flat_actions.append(item)
-            if item.up:
-                stack.append(item.up)
-        else: # isinstance(item, ActionCluster):
-            flat_clusters.append(item)
-            stack.append(item.left)
-            stack.append(item.right)
+            if item.parent is not None:
+                stack.append(item.parent.left_parent)
+                stack.append(item.parent.right_parent)
     flat_actions.sort(key=lambda a: a.name)
-    flat_clusters.sort(key=lambda c: c.down.name)
+    flat_clusters = [a.parent for a in flat_actions if a.parent is not None]
     return flat_actions, flat_clusters
 
 

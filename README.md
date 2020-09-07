@@ -3,6 +3,10 @@
 
 ## Preparation steps
 
+```
+sudo apt install python3-dev
+```
+
 This project uses pddlgym as a submodule. To clone, use
 
 ```

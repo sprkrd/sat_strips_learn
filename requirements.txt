@@ -1,3 +1,4 @@
+numpy
 matplotlib
 pillow
 gym
@@ -9,5 +10,4 @@ jinja2
 graphviz
 ipython
 ipykernel
-
-
+tqdm

@@ -1,5 +1,10 @@
 # Author: Alejandro S.H.
 
+"""
+This module defines the Action and the ActionCluster classes. The first contains
+several utility method that facilitate clustering.
+"""
+
 from .undirected_graph import UndirectedGraph
 from .utils import *
 from .feature import *
@@ -12,34 +17,47 @@ class Action:
 
     Parameters
     ----------
-    name: str
+    name : str
         name identifying the action
-    pre_list: list
-        precondition of the action, as list of tuples that represents a conjunction
-        of atoms. Each tuple represents such an atom, which in turn is an instantiated predicate.
-        The first element of the tuple is the name of the predicate, while the rest is the list
-        of arguments names. Arguments with a ? character in front of its name are
-        variables, prone to be substituted during action grounding. This representational
-        convention is the same for the add list and for the delete list.
-    add_list: list
-        add effect of the action, as a list of tuples. See description of pre_list.
-    del_list: list
-        delete effect of the action, as a list of tuples. See description of pre_list.
-    up: ActionCluster
-        should this action be the result of merging two actions, this parameter must point
-        to the cluster that represents this union (see ActionCluster).
+    features : list
+        list of Feature objects, each one representing a labeled predicate
+        (i.e. a predicate that appears in the add list, the delete list,
+        or the precondition of this action)
+    parent : ActionCluster
+        should this Action be the result of merging two actions, this parameter
+        must point to the cluster that represents this union (see ActionCluster).
+        Usually this is not filled by the user, but by the cluster method.
+    parameters_in_canonical_order : list
+        If the parameters should appear in some particular order, this parameter
+        should list them (as str) in the desired order.
+
+    Attributes
+    ----------
+    name : str
+        same as the value passed as parameter
+    features : list
+        same as the value passed as parameter
+    parent : ActionCluster
+        same as the value passed as parameter
     """
 
-    def __init__(self, name, features, up=None):
+    def __init__(self, name, features, parent=None, parameters_in_canonical_order=None):
         """
-        See help(type(self)) for accurate signature.
+        See help(type(self)).
         """
         self.name = name
         self.features = features
-        self.up = up
+        self.parent = parent
+        self._parameters_in_canonical_order = parameters_in_canonical_order
         self._cached_grouped_features = {feat_type: [] for feat_type in FEATURE_TYPES}
         for idx, feat in enumerate(features):
             self._cached_grouped_features[feat.feature_type].append((idx, feat))
+
+    def get_features_of_type(self, feature_type):
+        features = [feat for _,feat in self.get_grouped_features()[feature_type]]
+        # we sort the features to have a canonical order
+        features.sort(key=lambda feat: feat.atom)
+        return features
 
     def get_grouped_features(self):
         """
@@ -52,7 +70,7 @@ class Action:
             A dict from feature types (str) to lists. The lists contains
             (Int, Feature) tuples. The Int is the position in which the feature
             appears in self.features (so it can be used to uniquely identify
-            the feature within this action).
+            the feature *within* this action).
         """
         return self._cached_grouped_features
 
@@ -62,9 +80,9 @@ class Action:
 
         Parameters
         ----------
-        feature_types : list or None
-            A (sub)set of FEATURE_TYPES, the features where the method must look
-            into in the search for objects.
+        feature_types : iterable or None
+            A (sub)set of FEATURE_TYPES, the type(s) of the features where this
+            method must look into in the search for objects.
 
         Returns
         -------
@@ -89,144 +107,295 @@ class Action:
         parameters : list
             list of strings containing the lifted objects.
         """
+        if self._parameters_in_canonical_order is not None:
+            return self._parameters_in_canonical_order
         # we sort the parameters so there is some canonical ordering
         parameters = sorted(filter(is_lifted, self.get_referenced_objects()))
         return parameters
 
-    def replace_references(self, sigma):
-        name = action_id_gen()
-        pre_list = [replace(a,sigma) for a in self.pre_list]
-        add_list = [replace(a,sigma) for a in self.add_list]
-        del_list = [replace(a,sigma) for a in self.del_list]
-        return Action(name, pre_list, add_list, del_list)
+    def get_role_count(self, feature_types=None, include_uncertain=True):
+        """
+        Count the number of occurrences of each feature *role* (i.e. the head
+        of the feature) of the given feature_types.
+
+        Parameters
+        ----------
+        feature_types : iterable or None
+            A (sub)set of FEATURE_TYPES, the type(s) of the features that this
+            method should consider.
+        include_uncertain : Bool
+            Whether or not to count uncertain_features
+
+        Returns
+        -------
+        out : dict
+            A dict from strings representing the name of the feature type to
+            another dict. The value dict goes from strs (role name) to Ints
+            (occurrence count).
+
+        Examples
+        --------
+        >>> ex = Action("example", [
+        ...     Feature(("p", "x", "y"), feature_type="pre"),
+        ...     Feature(("p", "a", "b"), feature_type="add"),
+        ...     Feature(("p", "s", "t"), feature_type="add"),
+        ...     Feature(("p", "x", "y"), feature_type="del"),
+        ...     Feature(("q",), feature_type="del")])
+        >>> sorted(ex.get_role_count().items())
+        [('p', 4), ('q', 1)]
+        >>> sorted(ex.get_role_count(["pre", "add"]).items())
+        [('p', 3)]
+        """
+        feature_types = feature_types or FEATURE_TYPES
+        grouped_features = self.get_grouped_features()
+        role_count = {}
+        for feat_type in feature_types:
+            for _, feat in grouped_features[feat_type]:
+                if feat.certain or include_uncertain:
+                    try:
+                        role_count[feat.head] += 1
+                    except KeyError:
+                        role_count[feat.head] = 1
+        return role_count
+
+    def replace_references(self, sigma, name=None):
+        """
+        Creates and returns a new action with some objects replaced by others.
+
+        Parameters
+        ----------
+        sigma : dict
+            A substitution, represented as a dictionary from source objects
+            (strs) to destination objects (also strs).
+        name : str
+            Name for the newly created action.
+        """
+        name = name or action_id_gen()
+        features = [feat.replace(sigma) for feat in self.features]
+        return Action(name, features, parent=self.parent)
+
+    def instantiate(self, args, include_uncertain=False):
+        """
+        Creates and returns a new action with some objects replaced by others.
+        Maintains same name as self (as the resulting action is an instantiation
+        of this one), and offers the possibility to include or not uncertain
+        features.
+
+        Parameters
+        ----------
+        args : iterable
+            Arguments, there should be as many as self.get_parameters()
+        include_uncertain : bool
+            Whether or not to include uncertain features
+        """
+        sigma = dict(zip(self.get_parameters(), args))
+        features = [feat.replace(sigma) for feat in self.features if feat.certain or include_uncertain]
+        return Action(self.name, features, parent=self.parent)
 
     def get_object_graph(self):
         """
         Constructs an undirected graph in which the referenced objects act as
-        vertices. Two objects are connected through an edge if they appear together
-        in at least one predicate (i.e. an atom from the precondition, the add list or the
-        delete list). This graph gives an idea on how "distant" objects are from each other.
+        vertices. Two objects are connected through an edge if they appear
+        together in at least one predicate (i.e. an atom from the precondition,
+        the add list or the delete list). This graph gives an idea on how
+        "distant" objects are from each other.
 
         Returns
         -------
         out : UndirectedGraph
-            an udirected graph G = <V,E> in which V is the set of objects referenced by
+            an undirected graph G = <V,E> in which V is the set of objects referenced by
             this action and E is the set of all (u,v) pairs s.t. u,v appear together
             in at least one atom.
         """
         nodes = self.get_referenced_objects()
-        edges = []
+        edges = set()
         for feat in self.features:
             for idx,u in enumerate(feat.arguments):
                 for v in feat.arguments[idx+1:]:
-                    edges.append((u,v))
+                    if u < v:
+                        edges.add((u,v))
+                    elif v < u:
+                        edges.add((v,u))
+                    else:
+                        # don't do self-edges!
+                        pass
         return UndirectedGraph(nodes, edges)
 
-    def get_precondition_scores(self):
+    def get_object_scores(self):
         """
-        Calculates a score for each atom in the precondition that gives an idea of
-        how "distant" or unrelated they are to the effects.
+        Computes a score for each object (both parameters and constants)
+        referenced by this action.
 
-        Return
-        ------
-        out: list
-            the list of scores (Int) assigned to the preconditions, in order of
-            appearance. The larger the score, the more unrelated the precondition
-            atom is to the effect.
+        Returns
+        -------
+        scores : dict
+            a dict from strings (each representing an object) to ints (the score
+            value). The score represents a sort of relevance of an
+            object. The maximum possible score is 0. All affected objects (i.e.
+            those in the effects) have a score of 0. The rest have a negative
+            score based on the distance to the effect objects.
         """
-        effect_objects = self.get_referenced_objects(sections=["add", "del"])
+        effect_objects = self.get_referenced_objects(feature_types=["add", "del"])
         object_graph = self.get_object_graph()
-        object_scores = object_graph.bfs(effect_objects)
-        return [min(object_scores[o] for o in f[1:]) for f in self.pre_list]
+        object_scores = {k:-v for k,v in object_graph.bfs(effect_objects).items()}
+        return object_scores
 
-    def filter_preconditions(self, max_pre_score, pre_scores=None):
+    def get_feature_scores(self, take_min=True):
+        """
+        Calculates a score for each feature that gives an idea of
+        how "distant" or unrelated they are to the effects. It does either taking
+        the minimum or maximum score over the objects in the arguments of the
+        feature. See help(self.get_object_scores). Necessarily, the effect
+        features have a score of 0.
+
+        Parameters
+        ----------
+        take_min : Bool
+            Whether to assign the minimum over the feature arguments' scores
+            to the feature, or the maximum. If True, the computed scores
+            are more conservative, giving generally worst scores to the features.
+            Otherwise, the features are assigned better scores.
+
+        Returns
+        -------
+        out : list
+            the list of scores (Ints), with out[i] being the score assigned to
+            self.features[i]. The scores are either 0 for the effects and,
+            possibly, some preconditions, and negative for the rest of
+            preconditions.
+        """
+        fn = min if take_min else max
+        object_scores = self.get_object_scores()
+        return [fn([object_scores[o] for o in feat.arguments], default=0) for feat in self.features]
+
+    def filter_features(self, min_score, name=None, take_min=True):
         """
         Computes an new action with the same effect as this one, but with
         some atoms from the precondition filtered out.
 
         Parameters
         ----------
-        max_pre_score: Int
-            Score threshold. Retain atoms whose score is less than or equal to
-            this value. See get_precondition_scores to learn more about the scores.
-        pre_scores: list or None
-            Score vector. If the scores have already been calculated via
-            get_precondition_scores, they can be provided here to avoid recomputing them.
-            If None is given, get_precondition_scores is called internally.
+        min_score : Int
+            Score threshold. Retain atoms whose score is greater than or equal to
+            this value. See get_feature_scores to learn more about the scores.
+        name : list or None
+            The name that will be given to the newly created action.
+        take_min : Bool
+            See help(self.get_feature_scores) to learn more about this parameter.
 
-        Return
-        ------
+        Returns
+        -------
         out: Action
             New action with same effects and filtered preconditions.
         """
-        pre_scores = pre_scores or self.get_precondition_scores()
-        name = action_id_gen()
-        pre_list = [f for s,f in zip(pre_scores, self.pre_list) if s <= max_pre_score]
-        add_list = self.add_list[:] # copy added atoms
-        del_list = self.del_list[:] # copy deleted atoms
-        return Action(name, pre_list, add_list, del_list)
+        name = name or action_id_gen()
+        feat_scores = self.get_feature_scores(take_min)
+        features = [feat for feat,score in zip(self.features, feat_scores) if score >= min_score]
+        return Action(name, features, parent=self.parent)
 
-
-    def get_effect_label_count(self):
+    def cluster_broadphase(self, other):
         """
-        Count the number of occurrences of each predicate in the add and delete lists.
+        Simply compares the number of predicates of each type in the effects of
+        self and another action to make sure that they may be potentially
+        clustered. This is a very easy check before bringing the big guns
+        and trying to cluster the actions.
 
-        Return
-        ------
-        out: dict
-            A dict from string to Int that maps add/delete feature name to
-            the number of occurrences in the effects.
+        Examples
+        --------
+        >>> a = Action("a", [
+        ...     Feature(("p","x"), feature_type="add", certain=True),
+        ...     Feature(("p","y"), feature_type="add", certain=False),
+        ...     Feature(("p","s"), feature_type="del", certain=True),
+        ...     Feature(("p","t"), feature_type="del", certain=True),
+        ...     Feature(("p","u"), feature_type="del", certain=False)])
+        >>> b = Action("b", [
+        ...     Feature(("p","x"), feature_type="add", certain=True),
+        ...     Feature(("p","y"), feature_type="add", certain=True),
+        ...     Feature(("p","t"), feature_type="del", certain=False),
+        ...     Feature(("p","u"), feature_type="del", certain=False)])
+        >>> c = Action("c", [
+        ...     Feature(("p","x"), feature_type="add", certain=True),
+        ...     Feature(("p","y"), feature_type="add", certain=True),
+        ...     Feature(("p","u"), feature_type="del", certain=False)])
+        >>> a.cluster_broadphase(b)
+        True
+        >>> a.cluster_broadphase(c)
+        False
+        >>> b.cluster_broadphase(c)
+        True
         """
-        effect_label_count = {}
-        for label,*_ in self.get_features(["add", "del"]):
-            effect_label_count[label] = effect_label_count.get(label,0) + 1
-        return effect_label_count
+        # TODO Which option is more appropriate? Leaving this functionality
+        # as a method of Action or putting it as a standalone function?
+        if not dict_leq(self.get_role_count(("add",),False), other.get_role_count(("add",))):
+            return False
+        if not dict_leq(self.get_role_count(("del",),False), other.get_role_count(("del",))):
+            return False
+        if not dict_leq(other.get_role_count(("add",),False), self.get_role_count(("add",))):
+            return False
+        if not dict_leq(other.get_role_count(("del",),False), self.get_role_count(("del",))):
+            return False
+        return True
 
     @staticmethod
-    def from_transition(s, s_next, lifted=False):
+    def from_transition(s, s_next, lifted=False, name=None):
         """
         Static constructor that takes two states that are interpreted as successive
         and builds an action that describes the transition.
 
         Parameters
         ----------
-        s: set
-            State represented as a collection of tuples (atom). Each tuple is a fact
-            or fluent that holds in the situation represented by the state.
-        s_next: set
+        s : State
+            State before the transition
+        s_next : State
             State after the transition
-        lifted: Bool
+        lifted : Bool
             If True, then all the objects involved in the transition are lifted. That is,
             the referenced objects are replaced by a lifted variable of the form ?x[id].
+
+        Examples
+        --------
+        >>> s1 = State({("a",), ("b",)}, {("c",), ("d",), ("e",)})
+        >>> s2 = State({("a",), ("d",), ("f",)}, {("c",), ("e",)})
+        >>> print(Action.from_transition(s1, s2, name="a"))
+        Action{
+          name = a,
+          parameters = [],
+          precondition = [a(), b(), c()?, d()?, e()?],
+          add list = [c()?, d()?, e()?, f()],
+          del list = [b(), c()?, e()?]
+        }
         """
-        name = action_id_gen()
-        pre = list(s)
-        add_eff = list(s_next.difference(s))
-        del_eff = list(s.difference(s_next))
+        name = name or action_id_gen()
+        add_certain = s_next.difference(s)
+        del_certain = s.difference(s_next)
+        add_uncertain = s_next.difference(s, False)
+        del_uncertain = s.difference(s_next, False)
+        features = []
+        for atom in s.atoms:
+            features.append(Feature(atom, feature_type="pre"))
+        for atom in s.uncertain_atoms:
+            features.append(Feature(atom, feature_type="pre", certain=False))
+        for atom in add_certain:
+            features.append(Feature(atom, feature_type="add"))
+        for atom in add_uncertain:
+            features.append(Feature(atom, feature_type="add", certain=False))
+        for atom in del_certain:
+            features.append(Feature(atom, feature_type="del"))
+        for atom in del_uncertain:
+            features.append(Feature(atom, feature_type="del", certain=False))
         if lifted:
             ref_dict = {}
-            pre = [lift_atom(a, ref_dict) for a in pre]
-            add_eff = [lift_atom(a,ref_dict) for a in add_eff]
-            del_eff = [lift_atom(a, ref_dict) for a in del_eff]
-        return Action(name, pre, add_eff, del_eff)
-
-    def cluster_broadphase(self, other):
-        """
-        Simply compares the number of predicates of each type in the effects of
-        action0 and action1 to make sure that they can be joined
-        """
-        return self.get_effect_label_count() == other.get_effect_label_count()
+            for feat in features:
+                feat.lift_atom(ref_dict)
+        return Action(name, features)
 
     def __str__(self):
         name = self.name
         grouped_features = self.get_grouped_features()
         par_str = ", ".join(self.get_parameters())
-        pre_str = ", ".join(atom_to_str(feat.atom)+("" if feat.certain else "*")
-            for _,feat in grouped_features["pre"])
-        add_str = ", ".join(atom_to_str(feat.atom)+("" if feat.certain else "*")
-            for _,feat in grouped_features["add"])
-        del_str = ", ".join(atom_to_str(feat.atom)+("" if feat.certain else "*")
-            for _,feat in grouped_features["del"])
+        pre_str = ", ".join(str(feat) for feat in self.get_features_of_type("pre"))
+        add_str = ", ".join(str(feat) for feat in self.get_features_of_type("add"))
+        del_str = ", ".join(str(feat) for feat in self.get_features_of_type("del"))
         return  "Action{\n"\
                f"  name = {name},\n"\
                f"  parameters = [{par_str}],\n"\
@@ -241,13 +410,13 @@ class Action:
     def to_pddl(self, include_uncertain=True):
         name = self.name
         grouped_features = self.get_grouped_features()
-        par_str = " ".join(self.get_parameters())
+        par_str = " ".join(map(prolog_to_pddl,self.get_parameters()))
         pre_str = " ".join(atom_to_pddl(feat.atom)
-            for _,feat in grouped_features["pre"] if feat.certain or include_uncertain)
+            for feat in self.get_features_of_type("pre") if feat.certain or include_uncertain)
         add_str = " ".join(atom_to_pddl(feat.atom)
-            for _,feat in grouped_features["add"] if feat.certain or include_uncertain)
-        del_str = " ".join("(not "+atom_to_pddl(feat.atom)+")"
-            for _,feat in grouped_features["del"] if feat.certain or include_uncertain)
+            for feat in self.get_features_of_type("add") if feat.certain or include_uncertain)
+        del_str = " ".join(atom_to_pddl(feat.atom)
+            for feat in self.get_features_of_type("del") if feat.certain or include_uncertain)
         return f"(:action {name}\n"\
                f"  parameters: ({par_str})\n"\
                f"  precondition: (and {pre_str})\n"\
@@ -261,34 +430,58 @@ class ActionCluster:
 
     Parameters
     ----------
-    left: Action
+    left_parent: Action
         first action in the merging operation
-    right: Action
+    right_parent: Action
         second action in the merging operation
-    down: Action
-        result of the union
     distance: numeric (i.e. int, float)
         score that measures how distant left is from right
     """
 
-    def __init__(self, left, right, down, distance):
+    def __init__(self, left_parent, right_parent, distance, additional_info=None):
         self.name = cluster_id_gen()
-        self.left = left
-        self.right = right
-        self.down = down
+        self.left_parent = left_parent
+        self.right_parent = right_parent
         self.distance = distance
+        self.additional_info = additional_info
 
 
 if __name__ == "__main__":
-    pick = Action("pick", [
-        Feature(("ontable", "?x"), feature_type="pre"),
-        Feature(("clear", "?x"), feature_type="pre"),
-        Feature(("handempty",), feature_type="pre"),
-        Feature(("ontable", "?x", "?y"), feature_type="del"),
-        Feature(("handempty",), feature_type="del"),
-        Feature(("clear", "?x"), feature_type="del", certain=False),
-        Feature(("holding", "?x"), feature_type="add")])
-    print(pick)
-    print(pick.to_pddl())
-    print(pick.to_pddl(False))
-    print(pick.get_object_graph())
+    from .state import State
+    import doctest
+    # doctest.testmod()
+    # pick = Action("pick", [
+        # Feature(("ontable", "X"), feature_type="pre"),
+        # Feature(("clear", "X"), feature_type="pre"),
+        # Feature(("handempty",), feature_type="pre"),
+        # Feature(("ontable", "X"), feature_type="del"),
+        # Feature(("handempty",), feature_type="del"),
+        # Feature(("clear", "X"), feature_type="del", certain=False),
+        # Feature(("holding", "X"), feature_type="add")])
+    # print(pick)
+    # print(pick.to_pddl())
+    # print(pick.to_pddl(False))
+    # print(pick.get_object_graph())
+    # print(pick.get_object_graph().bfs(["X"]))
+    # print(pick.get_feature_scores(take_min=False))
+
+    # move = Action("move", [
+        # Feature(("at", "l00"), feature_type="pre"),
+        # Feature(("adj", "l00", "l01"), feature_type="pre"),
+        # Feature(("adj", "l01", "l02"), feature_type="pre"),
+        # Feature(("adj", "l10", "l11"), feature_type="pre"),
+        # Feature(("adj", "l11", "l12"), feature_type="pre"),
+        # Feature(("adj", "l00", "l10"), feature_type="pre"),
+        # Feature(("adj", "l01", "l11"), feature_type="pre"),
+        # Feature(("adj", "l02", "l12"), feature_type="pre"),
+        # Feature(("at", "l00"), feature_type="del"),
+        # Feature(("at", "l10"), feature_type="add")])
+    # print(move)
+    # print(move.get_object_graph())
+    # print(move.get_object_scores())
+    # print(move.get_feature_scores(take_min=True))
+    # print(move.get_feature_scores(take_min=False))
+    # print(move.filter_features(-1, take_min=True))
+    # print(move.filter_features(-1, take_min=False))
+
+    # print(move.get_role_count())

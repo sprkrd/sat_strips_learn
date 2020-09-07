@@ -1,4 +1,4 @@
-from .utils import tuple_to_str 
+from .utils import atom_to_str 
 
 
 class State:
@@ -10,25 +10,25 @@ class State:
 
     Parameters
     ----------
-    atoms: set
+    atoms : set
         Collection of facts (string tuples where the first member is the name
         of the role or predicate, and the rest is the arguments that instantiate
         it) that are known for sure.
-    uncertain_atoms: set
+    uncertain_atoms : set
         Same structure as atoms, but these are not guaranteed to be true. It
         is assumed that the atoms and uncertain_atoms are disjoint sets, because
         a fact cannot be known and unknown at the same time. The caller
         is responsible to enforce this.
     """
 
-    def __init__(self, atoms, uncertain_atoms):
+    def __init__(self, atoms, uncertain_atoms=None):
         """
-        Please, refer to help(type(self)).
+        See help(type(self)).
         """
         self.atoms = atoms
-        self.uncertain_atoms = uncertain_atoms
+        self.uncertain_atoms = uncertain_atoms or set()
 
-    def difference(self, other, uncertain=False):
+    def difference(self, other, certain=True):
         """
         Computes the predicates that should be added to another given state to
         become this one.
@@ -39,11 +39,11 @@ class State:
 
         Parameters
         ----------
-        other: State
+        other : State
             state that is compared to self
-        uncertain: bool
-            if true, only the uncertain additions are returned, otherwise, only
-            the certain additions are returned.
+        certain : Bool
+            if true, only the certain additions are returned, otherwise, only
+            the uncertain additions are returned.
 
         Return
         ------
@@ -51,14 +51,14 @@ class State:
             the set of atoms that should be added to make other equal to self
             (or that should be removed from other to become self).
         """
-        if uncertain:
+        if not certain:
             return (self.atoms&other.uncertain_atoms) |\
                    (self.uncertain_atoms-other.atoms)
         return self.atoms - other.atoms - other.uncertain_atoms
 
     def __str__(self):
-        fst_part = ",".join(map(tuple_to_str, self.atoms))
-        snd_part = ",".join(map(tuple_to_str, self.uncertain_atoms))
+        fst_part = ",".join(map(atom_to_str, self.atoms))
+        snd_part = ",".join(map(atom_to_str, self.uncertain_atoms))
         return f"{{ {fst_part}; maybe {snd_part} }}"
 
 
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     print(state1)
     print(state2)
     print(state2.difference(state1))
-    print(state2.difference(state1, uncertain=True))
+    print(state2.difference(state1, certain=False))
     print(state1.difference(state2))
-    print(state1.difference(state2, uncertain=True))
+    print(state1.difference(state2, certain=False))
 

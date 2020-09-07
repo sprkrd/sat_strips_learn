@@ -1,5 +1,3 @@
-# Author: Alejandro S.H.
-
 """
 This module defines the Action and the ActionCluster classes. The first contains
 several utility method that facilitate clustering.

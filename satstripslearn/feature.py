@@ -1,5 +1,3 @@
-# Author: Alejandro S.H.
-
 """
 This module defines the Feature class and supporting variable(s).
 """

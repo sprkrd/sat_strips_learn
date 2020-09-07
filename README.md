@@ -1,4 +1,4 @@
-# sat_strips_learn
+# Action Unification and OARU
 
 
 ## Preparation steps

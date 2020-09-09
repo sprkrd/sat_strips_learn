@@ -238,21 +238,20 @@ class Action:
         object_scores = {k:-v for k,v in object_graph.bfs(effect_objects).items()}
         return object_scores
 
-    def get_feature_scores(self, take_min=True):
+    def get_feature_scores(self, fn=sum, **kwargs):
         """
         Calculates a score for each feature that gives an idea of
-        how "distant" or unrelated they are to the effects. It does either taking
-        the minimum or maximum score over the objects in the arguments of the
-        feature. See help(self.get_object_scores). Necessarily, the effect
-        features have a score of 0.
+        how "distant" or unrelated they are to the effects. It receives an
+        aggregation function to combine the individual scores of each
+        feature's arguments. See help(self.get_object_scores).
 
         Parameters
         ----------
-        take_min : Bool
-            Whether to assign the minimum over the feature arguments' scores
-            to the feature, or the maximum. If True, the computed scores
-            are more conservative, giving generally worst scores to the features.
-            Otherwise, the features are assigned better scores.
+        fn : callable
+            Function that should map tuples of feature scores to a single
+            scores (i.e. (int,int,...) -> int)
+        **kwargs : any
+            Additional parameters for the fn function.
 
         Returns
         -------
@@ -262,24 +261,26 @@ class Action:
             possibly, some preconditions, and negative for the rest of
             preconditions.
         """
-        fn = min if take_min else max
         object_scores = self.get_object_scores()
-        return [fn([object_scores[o] for o in feat.arguments], default=0) for feat in self.features]
+        return [fn(tuple(object_scores[o] for o in feat.arguments), **kwargs)
+                 for feat in self.features]
 
-    def filter_features(self, min_score, name=None, take_min=True):
+    def filter_features(self, min_score, name=None, fn=sum, **kwargs):
         """
         Computes an new action with the same effect as this one, but with
         some atoms from the precondition filtered out.
 
         Parameters
         ----------
-        min_score : Int
+        min_score : int
             Score threshold. Retain atoms whose score is greater than or equal to
             this value. See get_feature_scores to learn more about the scores.
         name : list or None
             The name that will be given to the newly created action.
-        take_min : Bool
+        fn : callable
             See help(self.get_feature_scores) to learn more about this parameter.
+        **kwargs : any
+            Additional parameters for the fn function.
 
         Returns
         -------
@@ -287,7 +288,7 @@ class Action:
             New action with same effects and filtered preconditions.
         """
         name = name or action_id_gen()
-        feat_scores = self.get_feature_scores(take_min)
+        feat_scores = self.get_feature_scores(fn, **kwargs)
         features = [feat for feat,score in zip(self.features, feat_scores) if score >= min_score]
         return Action(name, features, parent=self.parent)
 
@@ -447,7 +448,7 @@ class ActionCluster:
 if __name__ == "__main__":
     from .state import State
     import doctest
-    # doctest.testmod()
+    doctest.testmod()
     # pick = Action("pick", [
         # Feature(("ontable", "X"), feature_type="pre"),
         # Feature(("clear", "X"), feature_type="pre"),
@@ -461,7 +462,7 @@ if __name__ == "__main__":
     # print(pick.to_pddl(False))
     # print(pick.get_object_graph())
     # print(pick.get_object_graph().bfs(["X"]))
-    # print(pick.get_feature_scores(take_min=False))
+    # print(pick.get_feature_scores(fn=max, default=0))
 
     # move = Action("move", [
         # Feature(("at", "l00"), feature_type="pre"),
@@ -477,9 +478,9 @@ if __name__ == "__main__":
     # print(move)
     # print(move.get_object_graph())
     # print(move.get_object_scores())
-    # print(move.get_feature_scores(take_min=True))
-    # print(move.get_feature_scores(take_min=False))
-    # print(move.filter_features(-1, take_min=True))
-    # print(move.filter_features(-1, take_min=False))
+    # print(move.get_feature_scores(fn=min, default=0))
+    # print(move.get_feature_scores(fn=max, default=0))
+    # print(move.filter_features(0, fn=min, default=0))
+    # print(move.filter_features(0, fn=max, default=0))
 
     # print(move.get_role_count())

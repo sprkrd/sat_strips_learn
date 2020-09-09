@@ -11,12 +11,27 @@ ACTION_NODE_STYLE = {
     "fontcolor": "black"
 }
 
-
 CLUSTER_NODE_STYLE = {
     "fontname": "sans",
     "shape": "none",
     "margin": "0",
     "fontcolor": "white",
+    "penwidth": "0",
+}
+
+COARSE_ACTION_NODE_STYLE = {
+    "shape": "circle",
+    "width": "0.5",
+    "fixedsize": "true",
+}
+
+COARSE_CLUSTER_NODE_STYLE = {
+    "shape": "square",
+    "width": "0.5",
+    "fixedsize": "true",
+    "style": "filled",
+    "fillcolor": "black",
+    "penwidth": "0",
 }
 
 
@@ -59,7 +74,7 @@ CLUSTER_NODE_TMP = \
         '</tr>'\
         '<tr>'\
             '<td style="rounded" align="left">'\
-                '<b>dist.:</b> {cluster_distance}'\
+                '<b>dist.:</b> {cluster_distance:.02f}'\
             '</td>'\
         '</tr>'\
     '</table>>'
@@ -123,12 +138,12 @@ def format_atom_list(section, atom_list, atom_limit=1000, line_len=40):
     if not atom_list:
         text += "&lt;<i>empty</i>&gt;"
     elif atom_limit > 0:
-        text += " ".join(f"({';;'.join(atom)})" for atom in atom_list[:atom_limit])
+        text += ", ".join(str(atom) for atom in atom_list[:atom_limit])
         if atom_limit < len(atom_list):
-            text += f" &lt;<i>{len(atom_list) - atom_limit};;more</i>&gt;"
+            text += f" &lt;<i>{len(atom_list) - atom_limit} more</i>&gt;"
     else:
         text = f"<b>{section}:</b> &lt;<i>{quantified_name('atom', len(atom_list))}</i>&gt;"
-    wrapped_text = wrap_text(text, max_length=line_len).replace(";;", " ")
+    wrapped_text = wrap_text(text, max_length=line_len)
     return wrapped_text
 
 
@@ -136,10 +151,10 @@ def draw_action_node(g, action, atom_limit=1000, line_len=40, highlight=False):
     label = ACTION_NODE_TMP.format(
         action_name=action.name,
         border=4 if highlight else 1,
-        action_params=" ".join(action.get_parameters()),
-        action_pre=format_atom_list("pre", action.pre_list, atom_limit=atom_limit, line_len=line_len),
-        action_add=format_atom_list("add", action.add_list, atom_limit=atom_limit, line_len=line_len),
-        action_del=format_atom_list("del", action.del_list, atom_limit=atom_limit, line_len=line_len))
+        action_params=wrap_text(", ".join(action.get_parameters()), max_length=line_len),
+        action_pre=format_atom_list("pre", action.get_features_of_type("pre"), atom_limit=atom_limit, line_len=line_len),
+        action_add=format_atom_list("add", action.get_features_of_type("add"), atom_limit=atom_limit, line_len=line_len),
+        action_del=format_atom_list("del", action.get_features_of_type("del"), atom_limit=atom_limit, line_len=line_len))
     g.node(action.name, label=label)
 
 
@@ -149,9 +164,9 @@ def draw_cluster_node(g, cluster):
 
 
 def draw_cluster_graph(top_actions, line_len=30, atom_limit_top=1000, atom_limit_middle=2,
-        highlight_top=True, bottom_top=True):
+        highlight_top=True, rankdir="BT"):
     g = gv.Graph("g")
-    g.attr(rankdir="BT" if bottom_top else "TB")
+    g.attr(rankdir=rankdir)
     flat_actions, flat_clusters = flatten(top_actions)
     middle_actions = [act for act in flat_actions if act not in top_actions]
     g.attr("node", **ACTION_NODE_STYLE)
@@ -165,25 +180,50 @@ def draw_cluster_graph(top_actions, line_len=30, atom_limit_top=1000, atom_limit
     for cluster in flat_clusters:
         draw_cluster_node(g, cluster)
     for action in flat_actions:
-        if action.up:
-            g.edge(action.up.name, action.name)
+        if action.parent:
+            g.edge(action.parent.name, action.name)
     for cluster in flat_clusters:
-        g.edge(cluster.left.name, cluster.name)
-        g.edge(cluster.right.name, cluster.name)
+        g.edge(cluster.left_parent.name, cluster.name)
+        g.edge(cluster.right_parent.name, cluster.name)
+    return g
+
+
+def draw_coarse_cluster_graph(top_actions, highlight_top=True, rankdir="BT"):
+    g = gv.Graph("g")
+    g.attr(rankdir=rankdir)
+    flat_actions, flat_clusters = flatten(top_actions)
+    middle_actions = [act for act in flat_actions if act not in top_actions]
+    g.attr("node", **COARSE_ACTION_NODE_STYLE)
+    with g.subgraph() as s:
+        s.attr(rank="same")
+        for action in top_actions:
+            s.node(action.name, label="", penwidth="4" if highlight_top else "1")
+    for action in middle_actions:
+        g.node(action.name, label="")
+    g.attr("node", **COARSE_CLUSTER_NODE_STYLE)
+    for cluster in flat_clusters:
+        g.node(cluster.name, label="")
+    for action in flat_actions:
+        if action.parent:
+            g.edge(action.parent.name, action.name)
+    for cluster in flat_clusters:
+        g.edge(cluster.left_parent.name, cluster.name)
+        g.edge(cluster.right_parent.name, cluster.name)
     return g
 
 
 if __name__ == "__main__":
-   action1 = Action("action-1", [], [], [])
-   action2 = Action("action-2", [], [], [])
-   action3 = Action("action-3", [], [], [])
-   action4 = Action("action-4", [], [], [])
-   action5 = Action("action-5", [], [], [])
-   action6 = Action("action-6", [], [], [])
-   cluster1 = ActionCluster(action1, action2, action3, 0)
-   cluster2 = ActionCluster(action3, action4, action5, 0)
-   action3.up = cluster1
-   action5.up = cluster2
-   actions = [action5, action6]
-   g = draw_cluster_graph(actions)
-   g.render("g.gv", view=True)
+    from .feature import Feature
+    action1 = Action("action-1", [Feature(("on", "x", "y"))])
+    action2 = Action("action-2", [])
+    action3 = Action("action-3", [])
+    action4 = Action("action-4", [])
+    action5 = Action("action-5", [])
+    action6 = Action("action-6", [])
+    cluster1 = ActionCluster(action1, action2, 0)
+    cluster2 = ActionCluster(action3, action4, 0)
+    action3.parent = cluster1
+    action5.parent = cluster2
+    actions = [action5, action6]
+    g = draw_cluster_graph(actions)
+    g.render("g.gv", view=True, cleanup=True)

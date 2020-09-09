@@ -2,6 +2,24 @@ from .cluster_z3 import cluster
 from .utils import inverse_map, Timer
 from .action import Action
 
+from .viz import draw_cluster_graph, draw_coarse_cluster_graph
+
+
+def action_digest(a):
+    count_certain = 0
+    count_uncertain = 0
+    arity = len(a.get_parameters())
+    for f in a.features:
+        if f.certain:
+            count_certain += 1
+        else:
+            count_uncertain += 1
+    return (count_certain, count_uncertain, arity)
+
+
+def check_updated(a0, a1):
+    return action_digest(a0) != action_digest(a1)
+
 
 class OaruAlgorithm:
     def __init__(self, action_library=None, filter_features_kwargs=None):
@@ -35,8 +53,7 @@ class OaruAlgorithm:
                 dist_found_u = dist_u
         updated = True
         if found_u is not None:
-            updated = len(replace_action.features) != len(found_u.features) or \
-                      len(replace_action.get_parameters()) != len(found_u.get_parameters())
+            updated = check_updated(replace_action, found_u)
             del self.action_library[replace_action.name]
             additional_info = found_u.parent.additional_info
             sigma = inverse_map(additional_info["sigma_right"])
@@ -48,3 +65,10 @@ class OaruAlgorithm:
         self.wall_times.append(round(elapsed_cpu*1000))
         self.cpu_times.append(round(elapsed_wall*1000))
         return a_g, updated
+
+    def draw_graph(self, outdir, coarse=False, view=False, cleanup=True, filename="g.gv", **kwargs):
+        if coarse:
+            g = draw_coarse_cluster_graph(list(self.action_library.values()), **kwargs)
+        else:
+            g = draw_cluster_graph(list(self.action_library.values()), **kwargs)
+        g.render(outdir+"/"+filename, view=view, cleanup=cleanup)

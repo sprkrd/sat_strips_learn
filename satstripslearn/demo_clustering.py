@@ -41,7 +41,7 @@ s4 = State({("at", "loc-2-2"),
 
 
 if __name__ == "__main__":
-    oaru = OaruAlgorithm(filter_features_kwargs={"min_score": 0, "take_min": False})
+    oaru = OaruAlgorithm(filter_features_kwargs={"min_score": 0, "fn": max, "default": 0})
     print(oaru.action_recognition(s0, s1))
     print(oaru.action_recognition(s1, s2))
     print(oaru.action_recognition(s2, s1))

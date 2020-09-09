@@ -29,7 +29,7 @@ export FF_PATH=/path/to/ff/executable
 We recommend setting up a virtual environment for installing the dependencies:
 ```
 virtualenv sat_strips_learn_venv -p python3
-source sat_strips_learn/bin/activate
+source sat_strips_learn_venv/bin/activate
 pip install -r requirements.txt
 ```
 

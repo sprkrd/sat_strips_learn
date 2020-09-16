@@ -56,6 +56,11 @@ class State:
                    (self.uncertain_atoms-other.atoms)
         return self.atoms - other.atoms - other.uncertain_atoms
 
+    def __eq__(self, other):
+        if not isinstance(other, State):
+            return NotImplemented
+        return self.atoms == other.atoms and self.uncertain_atoms == other.uncertain_atoms
+
     def __str__(self):
         fst_part = ",".join(map(atom_to_str, self.atoms))
         snd_part = ",".join(map(atom_to_str, self.uncertain_atoms))

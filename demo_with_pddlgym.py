@@ -18,40 +18,13 @@ from pddlgym.parser import parse_plan_step
 
 from satstripslearn.action import Action
 from satstripslearn.oaru import OaruAlgorithm
+from satstripslearn.viz import draw_cluster_graph 
 
-
-from benchmark_performance_and_accuracy import ensure_folder_exists, get_state, generate_type_predicates
+from benchmark_performance_and_accuracy import ensure_folder_exists, get_state, generate_type_predicates, get_gmt_action_library
 
 
 DOMAIN = "sokoban"
 PROBLEM_IDX = 0
-
-
-def mean(t):
-    if t:
-        return sum(t)/len(t)
-    return 0
-
-
-def ensure_folder_exists(path):
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
-
-
-def lit_as_tuple(lit):
-    return (lit.predicate.name,) + tuple(arg.name if isinstance(arg, TypedEntity) else arg
-            for arg in lit.variables)
-
-
-def get_type_predicates(env):
-    type_preds = set()
-    if env._problem.uses_typing:
-        for obj in env._problem.objects:
-            type_preds.add((str(obj.var_type), obj.name))
-    return type_preds
 
 
 def record_transition(prv, nxt, oaru, output_folder="out"):
@@ -63,16 +36,16 @@ def record_transition(prv, nxt, oaru, output_folder="out"):
     next_img = Image.fromarray(nxt[0], "RGBA")
     prev_img.save(trans_folder+"/prev.png")
     next_img.save(trans_folder+"/next.png")
-    oaru.action_recognition(prv[1], nxt[1])
-    oaru.draw_graph(trans_folder, view=False, cleanup=True, line_len=31, rankdir="LR")
+    a_g, updated = oaru.action_recognition(prv[1], nxt[1])
+    if updated:
+        tqdm.tqdm.write(f"Update at transition {current_trans}")
+    oaru.draw_graph(trans_folder, view=False, cleanup=True, line_len=35, atom_limit_middle=1000, rankdir="LR")
     oaru.draw_graph(trans_folder, coarse=True, view=False, cleanup=True,
             highlight_top=False, filename="g_coarse.gv", rankdir="LR")
 
 
-def run_planning_agent_demo(env, outdir="out", fps=3, verbose=False, seed=None,
-        planner_name="ff", oaru=None):
-    oaru = oaru or OaruAlgorithm(filter_features_kwargs={"min_score": -0.5, "fn": mean})
-
+def run_planning_agent_demo(env, oaru, outdir="out", fps=3, verbose=False, seed=None,
+        planner_name="ff"):
     if seed is not None:
         env.seed(seed)
 
@@ -89,7 +62,7 @@ def run_planning_agent_demo(env, outdir="out", fps=3, verbose=False, seed=None,
     obs, debug_info = env.reset()
     type_predicates = generate_type_predicates(env.unwrapped)
 
-    print("Planning...")
+    tqdm.tqdm.write("Planning...")
     plan = run_planner(debug_info['domain_file'], debug_info['problem_file'], "ff")
 
     actions = []
@@ -103,7 +76,7 @@ def run_planning_agent_demo(env, outdir="out", fps=3, verbose=False, seed=None,
             )
         actions.append(a)
 
-    print("Generating state trajectory...")
+    tqdm.tqdm.write("Generating state trajectory...")
 
     state_trajectory = [ (env.render(), get_state(env.unwrapped, type_predicates)) ]
 
@@ -126,18 +99,34 @@ def run_planning_agent_demo(env, outdir="out", fps=3, verbose=False, seed=None,
 
     if verbose:
         # print("Final obs:", obs)
-        print("Total reward:", tot_reward)
-        print()
+        tqdm.tqdm.write(f"Total reward: {tot_reward}")
 
     env.close()
 
 
 def main():
+    outdir = "out"
+    ensure_folder_exists(outdir)
+    for folder in glob(f"{outdir}/trans*"):
+        shutil.rmtree(folder)
+    oaru = OaruAlgorithm(filter_features_kwargs={"min_score": -0.5, "fn": lambda t: sum(t)/len(t)})
     regular_problems = 5
     test_problems = 3
     env = gym.make(f"PDDLEnv{DOMAIN.capitalize()}-v0")
-    env.fix_problem_index(PROBLEM_IDX)
-    run_planning_agent_demo(env, verbose=True)
+    env.reset()
+    actions_gmt = list(get_gmt_action_library(env).values())
+    g = draw_cluster_graph(actions_gmt, line_len=40, rankdir="LR")
+    g.render(f"{outdir}/{DOMAIN}-actions.gv", view=True, cleanup=True)
+
+    for idx in tqdm.trange(regular_problems):
+        env.fix_problem_index(idx)
+        run_planning_agent_demo(env, outdir=outdir, verbose=True, oaru=oaru)
+    env = gym.make(f"PDDLEnv{DOMAIN.capitalize()}Test-v0")
+    for idx in tqdm.trange(test_problems):
+        env.fix_problem(idx)
+        run_planning_agent_demo(env, outdir=outdir, verbose=True, oaru=oaru)
+    for action in oaru.action_library.values():
+        print(action.to_pddl())
 
 
 if __name__ == "__main__":

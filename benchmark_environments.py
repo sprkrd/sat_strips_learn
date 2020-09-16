@@ -52,6 +52,55 @@ SELECTED_ENVIRONMENTS = [
 ]
 
 
+# PROBLEM_COUNT = {
+# }
+
+
+# PROBLEMS_SORTED_BY_DIFFICULTY = {
+# }
+
+
+def load_environment(env_name, test=False):
+    env = gym.make("PDDLEnv{}-v0".format(env_name.capitalize() +
+            ("Test" if test else "")))
+    return env
+
+
+def fix_problem_index(env, idx):
+    env_name, _ = os.path.splitext(os.path.basename(env._domain_file))
+    test = "_test" in env._problem_dir
+    # if idx < PROBLEM_COUNT[env_name][0] and test:
+    if idx < 5 and test:
+        env.close()
+        env = load_environment(env_name)
+    # elif idx >= PROBLEM_COUNT[env_name][0]:
+    elif idx >= 5:
+        if not test:
+            env.close()
+            env = load_environment(env_name, True)
+        # idx -= PROBLEM_COUNT[env_name][0]
+        idx -= 5
+        assert idx < len(env.problems)
+    env.fix_problem_index(idx)
+    return env
+
+
+# for env_name in ALL_ENVIRONMENTS:
+    # env = load_environment(env_name)
+    # count_normal = len(env.problems)
+    # env.close()
+    # env = load_environment(env_name, True)
+    # count_test = len(env.problems)
+    # PROBLEM_COUNT[env_name] = (count_normal, count_test)
+    # env.close()
+    # difficulty = []
+    # for idx in range(count_normal+count_test):
+        # env = fix_problem_index(env, idx)
+        # env.reset()
+        # difficulty.append((len(env._problem.objects), idx))
+    # difficulty.sort()
+    # PROBLEMS_SORTED_BY_DIFFICULTY[env_name] = [idx for diff,idx in difficulty]
+
 
 def ensure_folder_exists(path):
     try:
@@ -91,6 +140,7 @@ def get_state(env, type_predicates=None):
     if type_predicates:
         state.update(type_predicates)
     return State(state)
+
 
 
 def lit_as_tuple(lit):
@@ -177,7 +227,7 @@ def get_plan_trajectory(env, verbose=False, seed=None, partial_observability=Non
 
     obs, debug_info = env.reset()
     type_predicates = generate_type_predicates(env)
-    plan = run_planner(debug_info['domain_file'], debug_info['problem_file'], "ff")
+    plan = run_planner(debug_info['domain_file'], debug_info['problem_file'], "ff", timeout=300)
 
     a_lib_gmt = get_gmt_action_library(env)
 
@@ -275,17 +325,6 @@ def state_size_stats(state_sizes):
     return f"{min_state_size}/{median_state_size}/{max_state_size}"
 
 
-
-def problem_info_aux(env, problems, all_state_sizes, row1, row2):
-    for idx in trange(problems):
-        env.fix_problem_index(idx)
-        state_trajectory, action_trajectory = get_plan_trajectory(env)
-        row1.append(len(env._problem.objects))
-        state_sizes = [len(s.atoms) for s in state_trajectory]
-        all_state_sizes += state_sizes
-        row2.append(state_size_stats(state_sizes))
-
-
 def problem_info(environments):
     header_1 = [
             r"\textbf{Domain}",
@@ -303,9 +342,13 @@ def problem_info(environments):
         row2 = [env_name]
         env = gym.make("PDDLEnv{}-v0".format(env_name.capitalize()))
         all_state_sizes = []
-        problem_info_aux(env, 5, all_state_sizes, row1, row2)
-        env = gym.make("PDDLEnv{}Test-v0".format(env_name.capitalize()))
-        problem_info_aux(env, 3, all_state_sizes, row1, row2)
+        for idx in trange(8):
+            env = fix_problem_index(env, idx)
+            state_trajectory, action_trajectory = get_plan_trajectory(env)
+            row1.append(len(env._problem.objects))
+            state_sizes = [len(s.atoms) for s in state_trajectory]
+            all_state_sizes += state_sizes
+            row2.append(state_size_stats(state_sizes))
         row2.append(state_size_stats(all_state_sizes))
         table_1.append(row1)
         table_2.append(row2)

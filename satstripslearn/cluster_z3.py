@@ -34,7 +34,7 @@ def amo(variables):
     return constraints
 
 
-def cluster(left, right, include_additional_info=False):
+def cluster(left, right, include_additional_info=False, timeout=None):
     # TODO this function is a bit too long! At some point we should break it into
     # smaller chunks.
 
@@ -171,7 +171,14 @@ def cluster(left, right, include_additional_info=False):
     for weight, soft_const in soft_constraints:
         o.add_soft(soft_const, weight)
 
-    if o.check() != sat:
+    if timeout:
+        o.set("timeout", timeout)
+
+    result = o.check()
+    if result == unknown:
+        raise TimeoutError(f"timeout: {timeout}ms")
+
+    if result == unsat:
         return None
 
     model = o.model()

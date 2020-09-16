@@ -422,6 +422,23 @@ class Action:
                f"  effect: (and {add_str} {del_str})\n"\
                 ")"
 
+    def to_latex(self):
+        name = self.name
+        grouped_features = self.get_grouped_features()
+        par_str = ", ".join(self.get_parameters())
+        pre_str = ", ".join(str(feat) for feat in self.get_features_of_type("pre"))
+        add_str = ", ".join(str(feat) for feat in self.get_features_of_type("add"))
+        del_str = ", ".join(str(feat) for feat in self.get_features_of_type("del"))
+        lines = [
+                r"\begin{flushleft}",
+                fr"\underline{{{name.capitalize()}({par_str}):}}\\",
+                fr"\texttt{{Pre:}} \nohyphens{{{pre_str}}}\\",
+                fr"\texttt{{Add:}} \nohyphens{{{add_str}}}\\",
+                fr"\texttt{{Del:}} \nohyphens{{{del_str}}}\\",
+                r"\end{flushleft}"
+        ]
+        return "\n".join(lines)
+
 
 class ActionCluster:
     """

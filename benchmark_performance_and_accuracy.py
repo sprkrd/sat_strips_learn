@@ -17,18 +17,17 @@ from matplotlib.ticker import MaxNLocator
 
 from itertools import cycle
 
-from tqdm import trange
+from tqdm import trange, tqdm
 
-from satstripslearn.oaru import OaruAlgorithm
+from satstripslearn.oaru import OaruAlgorithm, STANDARD_FILTERS
 
 from benchmark_environments import SELECTED_ENVIRONMENTS as ENVIRONMENTS,\
         create_latex_tabular, get_plan_trajectory, ensure_folder_exists,\
-        get_gmt_action_library
+        get_gmt_action_library, load_environment, fix_problem_index
 # from benchmark_environments import ENVIRONMENTS
 
 
-FILTER_FEATURES_KWARGS = {"min_score": -0.34, "fn": lambda t: sum(t)/len(t) if t else 0}
-
+TIMEOUT = 2000 # timeout for AU in ms
 
 
 def calculate_precision_and_recall(a_g_gmt, a_g):
@@ -47,7 +46,7 @@ def process_trajectory(state_trajectory, action_trajectory, oaru,
     for i in trange(len(state_trajectory)-1):
         s_prev = state_trajectory[i]
         s = state_trajectory[i+1]
-        a_g, updated = oaru.action_recognition(s_prev, s)
+        a_g, updated = oaru.action_recognition(s_prev, s, logger=tqdm.write)
         updates_list.append(1 if updated else 0)
         a_g_gmt = action_trajectory[i]
         prec,rec = calculate_precision_and_recall(a_g_gmt, a_g)
@@ -55,11 +54,13 @@ def process_trajectory(state_trajectory, action_trajectory, oaru,
         rec_list.append(rec)
 
 
-def benchmark_env_aux(env_name, test, oaru, prec_list, rec_list, updates_list,
+def benchmark_env_aux(env_name, oaru, prec_list, rec_list, updates_list,
         problems, partial_observability=None, seed=None):
-    env = gym.make("PDDLEnv{}-v0".format(env_name.capitalize() + ("Test" if test else "")))
+    env = load_environment(env_name)
+    # for idx in tqdm(PROBLEMS_SORTED_BY_DIFFICULTY[env_name][:problems]):
     for idx in trange(problems):
-        env.fix_problem_index(idx)
+        tqdm.write(f"Problem {idx}")
+        env = fix_problem_index(env, idx)
         state_trajectory, action_trajectory = get_plan_trajectory(env,
                 partial_observability=partial_observability, seed=seed)
         process_trajectory(state_trajectory, action_trajectory, oaru, prec_list,
@@ -69,35 +70,46 @@ def benchmark_env_aux(env_name, test, oaru, prec_list, rec_list, updates_list,
 def print_action_library(env_name, a_lib, subfolder):
     folder = "out/"+subfolder+"/"
     ensure_folder_exists(folder)
-    env = gym.make("PDDLEnv{}-v0".format(env_name.capitalize()))
+    env = load_environment(env_name)
     env.reset()
     a_lib_gmt = get_gmt_action_library(env)
     env.close()
-    with open(folder+env_name+".txt", "w") as f:
-        print("------------------", file=f)
-        print("Ground Truth Model", file=f)
-        print("------------------", file=f)
-        for a in a_lib_gmt.values():
-            print(a, file=f)
-            # print(a.to_pddl(), file=f)
+    with open(folder+env_name+".tex", "w") as f:
+        print("% ------------------", file=f)
+        print("% Ground Truth Model", file=f)
+        print("% ------------------", file=f)
+        print(r"\begin{tcolorbox}[breakable]", file=f)
         print("", file=f)
-        print("------------------", file=f)
-        print("OARU's Model", file=f)
-        print("------------------", file=f)
-        for a in a_lib.values():
-            print(a, file=f)
+        print(r"\begin{center}\textbf{Ground Truth Model}\end{center}", file=f)
+        for a in a_lib_gmt.values():
+            # print(a, file=f)
             # print(a.to_pddl(), file=f)
+            print(a.to_latex(), file=f)
+            print("", file=f)
+        print(r"\end{tcolorbox}", file=f)
+        print("", file=f)
+        print("% ------------------", file=f)
+        print("% OARU's Model", file=f)
+        print("% ------------------", file=f)
+        print("", file=f)
+        print(r"\begin{tcolorbox}[breakable]", file=f)
+        print(r"\begin{center}\textbf{OARU's model}\end{center}", file=f)
+        for a in a_lib.values():
+            # print(a, file=f)
+            # print(a.to_pddl(), file=f)
+            print(a.to_latex(), file=f)
+            print("", file=f)
+        print(r"\end{tcolorbox}", file=f)
 
 
-def benchmark_env(env_name, table, problems, problems_test):
+def benchmark_env(env_name, table, problems):
     print(env_name)
     print("-----------")
-    oaru = OaruAlgorithm(filter_features_kwargs=FILTER_FEATURES_KWARGS)
+    oaru = OaruAlgorithm(filters=STANDARD_FILTERS, timeout=TIMEOUT)
     prec_list = []
     rec_list = []
     updates_list = []
-    benchmark_env_aux(env_name, False, oaru, prec_list, rec_list, updates_list, problems)
-    benchmark_env_aux(env_name, True, oaru, prec_list, rec_list, updates_list, problems_test)
+    benchmark_env_aux(env_name, oaru, prec_list, rec_list, updates_list, problems)
     print_action_library(env_name, oaru.action_library, "full_observability")
     row = [
             env_name,
@@ -112,8 +124,8 @@ def benchmark_env(env_name, table, problems, problems_test):
     return updates_list
     
 
-def benchmark_env_partial_obs(env_name, table, problems, problems_test, n_reps,
-        seed=None, partial_observability=(1,10)):
+def benchmark_env_partial_obs(env_name, table, problems, n_reps, seed=None,
+        partial_observability=(1,10)):
     print(env_name)
     print("-----------")
     rng = random.Random(seed)
@@ -126,12 +138,9 @@ def benchmark_env_partial_obs(env_name, table, problems, problems_test, n_reps,
 
     for i in trange(n_reps):
         updates_list = []
-        oaru = OaruAlgorithm(filter_features_kwargs=FILTER_FEATURES_KWARGS)
-        benchmark_env_aux(env_name, False, oaru, prec_list, rec_list, updates_list,
+        oaru = OaruAlgorithm(filters=STANDARD_FILTERS, timeout=TIMEOUT)
+        benchmark_env_aux(env_name, oaru, prec_list, rec_list, updates_list,
                 problems, seed=rng.randint(0,2**32-1),
-                partial_observability=partial_observability)
-        benchmark_env_aux(env_name, True, oaru, prec_list, rec_list, updates_list,
-                problems_test, seed=rng.randint(0,2**32-1),
                 partial_observability=partial_observability)
         cpu_times += cpu_times
         peak_mem_z3 = max(peak_z3_memory, oaru.peak_z3_memory)
@@ -192,7 +201,7 @@ def full_obs_experiment(domains_updates_cumsum, plot_from_pkl=False):
         update_curves = {}
         table = [HEADER]
         for env_name in ENVIRONMENTS:
-            updates_list = benchmark_env(env_name, table, 5, 3)
+            updates_list = benchmark_env(env_name, table, 8)
             update_curves[env_name] = updates_list
         with open("out/tabular_full_obs.tex", "w") as f:
             print(create_latex_tabular(table), file=f)
@@ -212,8 +221,8 @@ def partial_obs_experiment(domain_updates_cumsum, plot_from_pkl=False):
             # if env_name in ("depot", "sokoban"):
                 # table.append([env_name, "-", "-", "-", "-", "-"])
                 # continue
-            updates_list = benchmark_env_partial_obs(env_name, table, 5, 3,
-                    n_reps=5, seed=42, partial_observability=(0,5))
+            updates_list = benchmark_env_partial_obs(env_name, table, 8,
+                    n_reps=1, seed=42, partial_observability=(0,5))
             update_curves[env_name] = updates_list
         with open("out/tabular_partial_obs.tex", "w") as f:
             print(create_latex_tabular(table), file=f)

@@ -19,18 +19,19 @@ from itertools import cycle
 
 from tqdm import tqdm, trange
 
-from satstripslearn.oaru import OaruAlgorithm
+from satstripslearn.oaru import OaruAlgorithm, STANDARD_FILTERS
 
 from benchmark_environments import SELECTED_ENVIRONMENTS as ENVIRONMENTS,\
         create_latex_tabular, get_plan_trajectory, ensure_folder_exists,\
-        get_gmt_action_library
+        get_gmt_action_library, load_environment, fix_problem_index
 # from benchmark_environments import ENVIRONMENTS
 
 
-FILTER_FEATURES_KWARGS = {"min_score": -0.34, "fn": lambda t: sum(t)/len(t) if t else 0}
+FILTER_FEATURES_KWARGS = None #{"min_score": -1, "fn": lambda t: min(t, default=0)}
 
 
-NUMBER_OF_OBSERVATIONS = 1000
+NUMBER_OF_OBSERVATIONS = 10000
+TIMEOUT = 2000 # timeout for AU in ms
 
 
 def load_checkpoint(path, default=None):
@@ -67,10 +68,11 @@ def process_observation(observation, oaru, prec_list, rec_list, updates_list):
     rec_list.append(rec)
 
 
-def accumulate_observations(env_name, test, observations, problems, partial_observability=None, seed=None):
-    env = gym.make("PDDLEnv{}-v0".format(env_name.capitalize() + ("Test" if test else "")))
+def accumulate_observations(env_name, observations, problems, partial_observability=None, seed=None):
+    env = load_environment(env_name)
+    # for idx in tqdm(PROBLEMS_SORTED_BY_DIFFICULTY[env_name][:problems]):
     for idx in trange(problems):
-        env.fix_problem_index(idx)
+        env = fix_problem_index(env, idx)
         state_trajectory, action_trajectory = get_plan_trajectory(env,
                 partial_observability=partial_observability, seed=seed)
         for s, a, s_next in zip(state_trajectory, action_trajectory, state_trajectory[1:]):
@@ -81,20 +83,18 @@ def benchmark_env(env_name, seed=None, partial_observability=None):
     print(env_name)
     print("-----------")
     rng = random.Random(seed)
-    oaru = OaruAlgorithm(filter_features_kwargs=FILTER_FEATURES_KWARGS)
+    oaru = OaruAlgorithm(filters=STANDARD_FILTERS, timeout=TIMEOUT)
     observations = []
-    print("Generating observations for problems 1-5...")
-    accumulate_observations(env_name, False, observations, 5,
-            partial_observability, seed=rng.randint(0,2**32-1))
-    print("Generating observations for problems 6-8...")
-    accumulate_observations(env_name, True, observations, 3,
-            partial_observability, seed=rng.randint(0,2**32-1))
+    accumulate_observations(env_name, observations, 8, partial_observability,
+            seed=rng.randint(0,2**32-1))
     prec_list = []
     rec_list = []
     updates_list = []
     with tqdm(total=NUMBER_OF_OBSERVATIONS) as pbar:
+        obs_iter = cycle(observations)
         while len(updates_list) < NUMBER_OF_OBSERVATIONS:
-            obs = rng.choice(observations)
+            # obs = rng.choice(observations)
+            obs = next(obs_iter)
             process_observation(obs, oaru, prec_list, rec_list, updates_list)
             pbar.update(1)
 
@@ -107,26 +107,26 @@ def benchmark_env(env_name, seed=None, partial_observability=None):
     return result
     
 
-STYLES = ["-","--",":",".","-.","h","H"]
-def plot_update_cumsum(update_curves, domains, filename):
-    plt.figure(figsize=(3.5,3.5))
-    BIG_SIZE = 12
-    plt.rc('font', size=BIG_SIZE)          # controls default text sizes
+# STYLES = ["-","--",":",".","-.","h","H"]
+# def plot_update_cumsum(update_curves, domains, filename):
+    # plt.figure(figsize=(3.5,3.5))
+    # BIG_SIZE = 12
+    # plt.rc('font', size=BIG_SIZE)          # controls default text sizes
 
-    ax = plt.subplot()
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    # ax = plt.subplot()
+    # ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
-    plot_domains = domains
-    for dom,style in zip(plot_domains, cycle(STYLES)):
-        plt.plot(np.cumsum(update_curves[dom]),"k"+style)
-    plt.xlabel("Step")
-    plt.ylabel("#Updates")
-    if len(domains) > 1:
-        plt.legend(plot_domains)
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig("out/" + filename)
-    plt.close()
+    # plot_domains = domains
+    # for dom,style in zip(plot_domains, cycle(STYLES)):
+        # plt.plot(np.cumsum(update_curves[dom]),"k"+style)
+    # plt.xlabel("Step")
+    # plt.ylabel("#Updates")
+    # if len(domains) > 1:
+        # plt.legend(plot_domains)
+    # plt.grid(True)
+    # plt.tight_layout()
+    # plt.savefig("out/" + filename)
+    # plt.close()
 
 
 def plot_results(results, path):
@@ -142,17 +142,17 @@ def plot_results(results, path):
         entry["cpu"] = np.cumsum(entry["cpu"]) / x_values
         entry["precision"] = np.cumsum(entry["precision"]) / x_values
         entry["recall"] = np.cumsum(entry["recall"]) / x_values
-    fig, axes = plt.subplots(nrows=4, ncols=4, figsize=(12,8))
-    for col, (env1,env2) in enumerate(zip(ENVIRONMENTS[0::2], ENVIRONMENTS[1::2])):
+    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12,8))
+    for col, env_tuple in enumerate(zip(ENVIRONMENTS[0::3], ENVIRONMENTS[1::3], ENVIRONMENTS[2::3])):
         for row, metric in enumerate(("updates", "cpu", "precision", "recall")):
             ax = axes[row, col]
-            if row == 0:
-                ax.set_title(env1+"/"+env2)
+            for env in env_tuple:
+                ax.plot(x_values, results[env][metric])
+            ax.grid(True)
+            if row == 3:
+                ax.legend(env_tuple)
             if col == 0:
                 ax.set_ylabel(row_headers[metric], size="large")
-            ax.plot(x_values, results[env1][metric])
-            ax.plot(x_values, results[env2][metric])
-            ax.legend((env1, env2))
     fig.tight_layout()
     plt.savefig(path)
 
@@ -162,14 +162,27 @@ def main():
     checkpoint_path = "out/observation_sampling_checkpoint.pkl"
 
     checkpoint = {
-            "type": "full_observability",
+            "type": "partial_observability",
             "env_idx": 0,
             "full_observability": {},
             "partial_observability": {},
     }
     checkpoint = load_checkpoint(checkpoint_path, default=checkpoint)
 
-    if checkpoint["type"] == "full_observability":
+    if checkpoint["type"] == "partial_observability":
+        print("Partial observability")
+        print("---------------------")
+        for env_idx, env_name in enumerate(ENVIRONMENTS[checkpoint["env_idx"]:],
+                checkpoint["env_idx"]):
+            results = benchmark_env(env_name, 42, (0,5))
+            checkpoint["partial_observability"][env_name] = results
+            checkpoint["env_idx"] = env_idx + 1
+            save_checkpoint(checkpoint_path, checkpoint)
+        checkpoint["type"] = "full_observability"
+        checkpoint["env_idx"] = 0
+        save_checkpoint(checkpoint_path, checkpoint)
+
+    if checkpoint["env_idx"] < len(ENVIRONMENTS):
         print("Full observability")
         print("------------------")
         for env_idx, env_name in enumerate(ENVIRONMENTS[checkpoint["env_idx"]:],
@@ -178,17 +191,6 @@ def main():
             checkpoint["full_observability"][env_name] = results
             checkpoint["env_idx"] = env_idx + 1
             save_checkpoint(checkpoint_path, checkpoint)
-        checkpoint["type"] = "partial_observability"
-        checkpoint["env_idx"] = 0
-
-    print("Partial observability")
-    print("---------------------")
-    for env_idx, env_name in enumerate(ENVIRONMENTS[checkpoint["env_idx"]:],
-            checkpoint["env_idx"]):
-        results = benchmark_env(env_name, 42, (0,5))
-        checkpoint["partial_observability"][env_name] = results
-        checkpoint["env_idx"] = env_idx + 1
-        save_checkpoint(checkpoint_path, checkpoint)
 
     plot_results(checkpoint["full_observability"], "out/observation_sampling_full_obs_plot.pdf")
     plot_results(checkpoint["partial_observability"], "out/observation_sampling_partial_obs_plot.pdf")

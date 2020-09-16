@@ -21,11 +21,13 @@ from tqdm import trange
 
 from satstripslearn.oaru import OaruAlgorithm
 
-from benchmark_environments import SELECTED_ENVIRONMENTS as ENVIRONMENTS, create_latex_tabular, get_plan_trajectory, ensure_folder_exists
+from benchmark_environments import SELECTED_ENVIRONMENTS as ENVIRONMENTS,\
+        create_latex_tabular, get_plan_trajectory, ensure_folder_exists,\
+        get_gmt_action_library
 # from benchmark_environments import ENVIRONMENTS
 
 
-FILTER_FEATURES_KWARGS = {"min_score": -0.5, "fn": lambda t: sum(t)/len(t) if t else 0}
+FILTER_FEATURES_KWARGS = {"min_score": -0.34, "fn": lambda t: sum(t)/len(t) if t else 0}
 
 
 
@@ -64,6 +66,28 @@ def benchmark_env_aux(env_name, test, oaru, prec_list, rec_list, updates_list,
                 rec_list, updates_list)
 
 
+def print_action_library(env_name, a_lib, subfolder):
+    folder = "out/"+subfolder+"/"
+    ensure_folder_exists(folder)
+    env = gym.make("PDDLEnv{}-v0".format(env_name.capitalize()))
+    env.reset()
+    a_lib_gmt = get_gmt_action_library(env)
+    env.close()
+    with open(folder+env_name+".txt", "w") as f:
+        print("------------------", file=f)
+        print("Ground Truth Model", file=f)
+        print("------------------", file=f)
+        for a in a_lib_gmt.values():
+            print(a, file=f)
+            # print(a.to_pddl(), file=f)
+        print("", file=f)
+        print("------------------", file=f)
+        print("OARU's Model", file=f)
+        print("------------------", file=f)
+        for a in a_lib.values():
+            print(a, file=f)
+            # print(a.to_pddl(), file=f)
+
 
 def benchmark_env(env_name, table, problems, problems_test):
     print(env_name)
@@ -74,12 +98,7 @@ def benchmark_env(env_name, table, problems, problems_test):
     updates_list = []
     benchmark_env_aux(env_name, False, oaru, prec_list, rec_list, updates_list, problems)
     benchmark_env_aux(env_name, True, oaru, prec_list, rec_list, updates_list, problems_test)
-    # a_lib_gmt = get_gmt_action_library(env)
-    # for a in a_lib_gmt.values():
-        # print(a)
-    # print("<<<<>>>>")
-    # for a in oaru.action_library.values():
-        # print(a)
+    print_action_library(env_name, oaru.action_library, "full_observability")
     row = [
             env_name,
             len(oaru.action_library),
@@ -116,6 +135,8 @@ def benchmark_env_partial_obs(env_name, table, problems, problems_test, n_reps,
                 partial_observability=partial_observability)
         cpu_times += cpu_times
         peak_mem_z3 = max(peak_z3_memory, oaru.peak_z3_memory)
+
+    print_action_library(env_name, oaru.action_library, "partial_observability")
 
     row = [
             env_name,
@@ -199,6 +220,7 @@ def partial_obs_experiment(domain_updates_cumsum, plot_from_pkl=False):
         with open("out/partial_obs_updates.pkl", "wb") as f:
             pkl.dump(update_curves, f)
     plot_update_cumsum(update_curves, domain_updates_cumsum, "partial_obs_updates.pdf")
+
 
 
 def main():

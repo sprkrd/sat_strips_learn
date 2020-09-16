@@ -414,7 +414,7 @@ class Action:
             for feat in self.get_features_of_type("pre") if feat.certain or include_uncertain)
         add_str = " ".join(atom_to_pddl(feat.atom)
             for feat in self.get_features_of_type("add") if feat.certain or include_uncertain)
-        del_str = " ".join(atom_to_pddl(feat.atom)
+        del_str = " ".join(f"(not {atom_to_pddl(feat.atom)})"
             for feat in self.get_features_of_type("del") if feat.certain or include_uncertain)
         return f"(:action {name}\n"\
                f"  parameters: ({par_str})\n"\

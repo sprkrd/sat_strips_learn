@@ -17,10 +17,10 @@ from pddlgym.planning import run_planner
 from pddlgym.parser import parse_plan_step
 
 from satstripslearn.action import Action
-from satstripslearn.oaru import OaruAlgorithm
+from satstripslearn.oaru import OaruAlgorithm, STANDARD_FILTERS
 from satstripslearn.viz import draw_cluster_graph 
 
-from benchmark_performance_and_accuracy import ensure_folder_exists, get_state, generate_type_predicates, get_gmt_action_library
+from benchmark_environments import ensure_folder_exists, get_state, generate_type_predicates, get_gmt_action_library
 
 
 DOMAIN = "sokoban"
@@ -109,9 +109,9 @@ def main():
     ensure_folder_exists(outdir)
     for folder in glob(f"{outdir}/trans*"):
         shutil.rmtree(folder)
-    oaru = OaruAlgorithm(filter_features_kwargs={"min_score": -0.5, "fn": lambda t: sum(t)/len(t)})
-    regular_problems = 5
-    test_problems = 3
+    oaru = OaruAlgorithm(filters=[STANDARD_FILTERS[-1]], timeout=1000)
+    regular_problems = 1
+    test_problems = 0
     env = gym.make(f"PDDLEnv{DOMAIN.capitalize()}-v0")
     env.reset()
     actions_gmt = list(get_gmt_action_library(env).values())

@@ -27,7 +27,7 @@ from benchmark_environments import SELECTED_ENVIRONMENTS as ENVIRONMENTS,\
 # from benchmark_environments import ENVIRONMENTS
 
 
-TIMEOUT = 2000 # timeout for AU in ms
+TIMEOUT = 1000 # timeout for AU in ms
 
 
 def calculate_precision_and_recall(a_g_gmt, a_g):
@@ -105,7 +105,7 @@ def print_action_library(env_name, a_lib, subfolder):
 def benchmark_env(env_name, table, problems):
     print(env_name)
     print("-----------")
-    oaru = OaruAlgorithm(filters=STANDARD_FILTERS, timeout=TIMEOUT)
+    oaru = OaruAlgorithm(filters=STANDARD_FILTERS[2:], timeout=TIMEOUT)
     prec_list = []
     rec_list = []
     updates_list = []
@@ -138,7 +138,7 @@ def benchmark_env_partial_obs(env_name, table, problems, n_reps, seed=None,
 
     for i in trange(n_reps):
         updates_list = []
-        oaru = OaruAlgorithm(filters=STANDARD_FILTERS, timeout=TIMEOUT)
+        oaru = OaruAlgorithm(filters=STANDARD_FILTERS[2:], timeout=TIMEOUT)
         benchmark_env_aux(env_name, oaru, prec_list, rec_list, updates_list,
                 problems, seed=rng.randint(0,2**32-1),
                 partial_observability=partial_observability)
@@ -222,7 +222,7 @@ def partial_obs_experiment(domain_updates_cumsum, plot_from_pkl=False):
                 # table.append([env_name, "-", "-", "-", "-", "-"])
                 # continue
             updates_list = benchmark_env_partial_obs(env_name, table, 8,
-                    n_reps=1, seed=42, partial_observability=(0,5))
+                    n_reps=5, seed=42, partial_observability=(0,5))
             update_curves[env_name] = updates_list
         with open("out/tabular_partial_obs.tex", "w") as f:
             print(create_latex_tabular(table), file=f)

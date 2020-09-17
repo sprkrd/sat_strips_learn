@@ -105,7 +105,7 @@ def print_action_library(env_name, a_lib, subfolder):
 def benchmark_env(env_name, table, problems):
     print(env_name)
     print("-----------")
-    oaru = OaruAlgorithm(filters=STANDARD_FILTERS[2:], timeout=TIMEOUT)
+    oaru = OaruAlgorithm(filters=STANDARD_FILTERS[3:], timeout=TIMEOUT)
     prec_list = []
     rec_list = []
     updates_list = []
@@ -138,7 +138,7 @@ def benchmark_env_partial_obs(env_name, table, problems, n_reps, seed=None,
 
     for i in trange(n_reps):
         updates_list = []
-        oaru = OaruAlgorithm(filters=STANDARD_FILTERS[2:], timeout=TIMEOUT)
+        oaru = OaruAlgorithm(filters=STANDARD_FILTERS[3:], timeout=TIMEOUT)
         benchmark_env_aux(env_name, oaru, prec_list, rec_list, updates_list,
                 problems, seed=rng.randint(0,2**32-1),
                 partial_observability=partial_observability)

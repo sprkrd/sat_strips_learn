@@ -142,18 +142,25 @@ def plot_results(results, path):
         entry["cpu"] = np.cumsum(entry["cpu"]) / x_values
         entry["precision"] = np.cumsum(entry["precision"]) / x_values
         entry["recall"] = np.cumsum(entry["recall"]) / x_values
-    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12,8))
+    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12,8), sharex="col", sharey="row")
     for col, env_tuple in enumerate(zip(ENVIRONMENTS[0::3], ENVIRONMENTS[1::3], ENVIRONMENTS[2::3])):
         for row, metric in enumerate(("updates", "cpu", "precision", "recall")):
             ax = axes[row, col]
             for env in env_tuple:
-                ax.plot(x_values, results[env][metric])
+                if metric == "cpu":
+                    ax.semilogy(x_values, results[env][metric])
+                else:
+                    ax.plot(x_values, results[env][metric])
             ax.grid(True)
             if row == 3:
-                ax.legend(env_tuple)
+                ax.legend(env_tuple, loc="lower right")
+                ax.set_xlabel("#Steps")
             if col == 0:
                 ax.set_ylabel(row_headers[metric], size="large")
-    fig.tight_layout()
+
+    fig.subplots_adjust(hspace=0, wspace=0.05)
+
+    # fig.tight_layout()
     plt.savefig(path)
 
 

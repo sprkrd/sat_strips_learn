@@ -194,6 +194,8 @@ def cluster(left, right, include_additional_info=False, timeout=None):
                 obj_u = obj_l
             elif is_lifted(obj_r):
                 obj_u = obj_r
+            elif obj_l == obj_r:
+                obj_u = obj_l
             else:
                 obj_u = variable_id_gen()
             sigma_left[obj_l] = obj_u

@@ -104,9 +104,10 @@ class OaruAlgorithm:
         return a_g, updated
 
 
-    def draw_graph(self, outdir, coarse=False, view=False, cleanup=True, filename="g.gv", **kwargs):
+    def draw_graph(self, outdir, coarse=False, view=False, cleanup=True,
+            filename="g.gv", format="pdf", **kwargs):
         if coarse:
             g = draw_coarse_cluster_graph(list(self.action_library.values()), **kwargs)
         else:
             g = draw_cluster_graph(list(self.action_library.values()), **kwargs)
-        g.render(outdir+"/"+filename, view=view, cleanup=cleanup)
+        g.render(outdir+"/"+filename, view=view, cleanup=cleanup, format=format)

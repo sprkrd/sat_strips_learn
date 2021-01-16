@@ -39,9 +39,11 @@ def record_transition(prv, nxt, oaru, output_folder="out"):
     a_g, updated = oaru.action_recognition(prv[1], nxt[1])
     if updated:
         tqdm.tqdm.write(f"Update at transition {current_trans}")
-    oaru.draw_graph(trans_folder, view=False, cleanup=True, line_len=35, atom_limit_middle=1000, rankdir="LR")
+    oaru.draw_graph(trans_folder, view=False, cleanup=False, format="svg", line_len=35,
+            atom_limit_middle=1000, rankdir="LR", highlight_last_actions=True)
     oaru.draw_graph(trans_folder, coarse=True, view=False, cleanup=True,
-            highlight_top=False, filename="g_coarse.gv", rankdir="LR")
+            highlight_top=True, filename="g_coarse.gv", format="svg", rankdir="LR",
+            highlight_last_actions=True)
 
 
 def run_planning_agent_demo(env, oaru, outdir="out", fps=3, verbose=False, seed=None,
@@ -116,7 +118,7 @@ def main():
     env.reset()
     actions_gmt = list(get_gmt_action_library(env).values())
     g = draw_cluster_graph(actions_gmt, line_len=40, rankdir="LR")
-    g.render(f"{outdir}/{DOMAIN}-actions.gv", view=True, cleanup=True)
+    g.render(f"{outdir}/{DOMAIN}-actions.gv", view=True, cleanup=True, format="svg")
 
     for idx in tqdm.trange(regular_problems):
         env.fix_problem_index(idx)

@@ -72,19 +72,21 @@ class Action:
         """
         return self._cached_grouped_features
 
-    def get_referenced_objects(self, feature_types=None):
+    def get_referenced_objects(self, feature_types=None, as_set=False):
         """
-        Extracts the list of objects referenced by this action.
+        Extracts the set of objects referenced by this action.
 
         Parameters
         ----------
         feature_types : iterable or None
             A (sub)set of FEATURE_TYPES, the type(s) of the features where this
             method must look into in the search for objects.
+        as_set : bool
+            Indicates whether to return the result as a set (True) or as a list (False)
 
         Returns
         -------
-        objects : list
+        objects : list or set
             List of strings, the names of the objects represented by this action.
         """
         feature_types = feature_types or FEATURE_TYPES
@@ -93,7 +95,7 @@ class Action:
         for feat_type in feature_types:
             for _, feat in grouped_features[feat_type]:
                 objects.update(feat.arguments)
-        return list(objects)
+        return objects if as_set else list(objects)
 
     def get_parameters(self):
         """
@@ -171,7 +173,36 @@ class Action:
         name = name or action_id_gen()
         features = [feat.replace(sigma) for feat in self.features]
         return Action(name, features, parent=self.parent)
-
+        
+    def can_produce_transition(self, pre_state, post_state):
+        for action in self.all_instantiations(pre_state):
+            state_after = action.apply(pre_state)
+            if state_after == post_state:
+                return True
+                
+        return False
+            
+    def apply(self, state):
+        state = state.copy()
+        for feat in self.features:
+            assert feat.is_ground() and feat.certain, "Action must be completely ground, and al features must be certain, in order to be applicable"
+            if feat.feature_type == "pre":
+                if feat.atom not in state.atoms:
+                    return None
+            elif feat.feature_type == "add":
+                state.atoms.add(feat.atom)
+            else:
+                state.atoms.discard(feat.atom)
+        return state
+        
+        
+    def all_instantiations(self, state):
+        assert not state.is_uncertain() and all(feat.certain for feat in self.features), "This functionality only works with full certainty"
+        grouped_features = self.get_grouped_features()
+        pre = [feat.atom for feat in grouped_features["pre"]]
+        for sigma in goal_match(state.atoms, pre):
+            yield self.instantiate(sigma)
+        
     def instantiate(self, args, include_uncertain=False):
         """
         Creates and returns a new action with some objects replaced by others.
@@ -181,12 +212,16 @@ class Action:
 
         Parameters
         ----------
-        args : iterable
-            Arguments, there should be as many as self.get_parameters()
+        args : iterable or dict
+            Arguments. If an iterable is given, the arguments should appear in the same
+            order as self.get_parameters().
         include_uncertain : bool
             Whether or not to include uncertain features
         """
-        sigma = dict(zip(self.get_parameters(), args))
+        if isinstance(args, dict):
+            sigma = args
+        else:
+            sigma = dict(zip(self.get_parameters(), args))
         features = [feat.replace(sigma) for feat in self.features if feat.certain or include_uncertain]
         return Action(self.name, features, parent=self.parent)
 

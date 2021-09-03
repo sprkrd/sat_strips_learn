@@ -55,6 +55,12 @@ class State:
             return (self.atoms&other.uncertain_atoms) |\
                    (self.uncertain_atoms-other.atoms)
         return self.atoms - other.atoms - other.uncertain_atoms
+        
+    def is_uncertain(self):
+        return bool(self.uncertain_atoms)
+        
+    def copy(self):
+        return State(self.atoms.copy(), self.uncertain_atoms.copy())
 
     def __eq__(self, other):
         if not isinstance(other, State):

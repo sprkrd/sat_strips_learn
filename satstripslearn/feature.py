@@ -3,7 +3,7 @@ This module defines the Feature class and supporting variable(s).
 """
 
 
-from .utils import replace, lift_atom, atom_to_str
+from .utils import replace, lift_atom, atom_to_str, is_lifted
 
 
 FEATURE_TYPES = ["pre", "add", "del"]
@@ -136,6 +136,9 @@ class Feature:
 
     def lift_atom(self, ref_dict):
         self.atom = lift_atom(self.atom, ref_dict)
+        
+    def is_ground(self):
+        return all(map(is_lifted, self.atom[1:]))
 
     def __hash__(self):
         return hash((self.atom,self.feature_type,self.certain))

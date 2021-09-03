@@ -102,7 +102,22 @@ class OaruAlgorithm:
         self.wall_times.append(round(elapsed_cpu*1000))
         self.cpu_times.append(round(elapsed_wall*1000))
         return a_g, updated
-
+        
+    def add_negative_example(self, pre_state, post_state):
+        assert not (pre_state.is_uncertain() or post_state.is_uncertain()), "This feature only works with fully observable states"
+        # TODO
+        # ~ a_g = self._action_from_transition(pre_state, post_state)
+        # ~ review_actions = list(self.action_library)
+        # ~ while review_actions:
+            # ~ next_set_of_review_actions = []
+            # ~ for a_lib in review_actions:
+                # ~ a_u = cluster(a_g, a_lib)
+                # ~ if not check_updated(a_u, a_lib):
+                    # ~ # a_lib allows the transition pre_state -> post_state, so it has to be split
+                    # ~ # to disallow the negative example
+                    # ~ del 
+        
+        raise NotImplementedError()
 
     def draw_graph(self, outdir, coarse=False, view=False, cleanup=True,
             filename="g.gv", format="pdf", **kwargs):

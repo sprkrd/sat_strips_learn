@@ -199,7 +199,7 @@ class Action:
     def all_instantiations(self, state):
         assert not state.is_uncertain() and all(feat.certain for feat in self.features), "This functionality only works with full certainty"
         grouped_features = self.get_grouped_features()
-        pre = [feat.atom for feat in grouped_features["pre"]]
+        pre = [feat.atom for _,feat in grouped_features["pre"]]
         for sigma in goal_match(state.atoms, pre):
             yield self.instantiate(sigma)
         

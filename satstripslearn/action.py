@@ -179,13 +179,13 @@ class Action:
             state_after = action.apply(pre_state)
             if state_after == post_state:
                 return True
-                
         return False
             
     def apply(self, state):
+        assert not state.is_uncertain(), "State must be completely certain"
         state = state.copy()
         for feat in self.features:
-            assert feat.is_ground() and feat.certain, "Action must be completely ground, and al features must be certain, in order to be applicable"
+            assert feat.is_ground() and feat.certain, "Action must be completely ground, and all features must be certain, in order to be applicable"
             if feat.feature_type == "pre":
                 if feat.atom not in state.atoms:
                     return None
@@ -194,7 +194,6 @@ class Action:
             else:
                 state.atoms.discard(feat.atom)
         return state
-        
         
     def all_instantiations(self, state):
         assert not state.is_uncertain() and all(feat.certain for feat in self.features), "This functionality only works with full certainty"

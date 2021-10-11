@@ -66,7 +66,7 @@ class Action:
         -------
         grouped_features : dict
             A dict from feature types (str) to lists. The lists contains
-            (Int, Feature) tuples. The Int is the position in which the feature
+            (int, Feature) tuples. The Int is the position in which the feature
             appears in self.features (so it can be used to uniquely identify
             the feature *within* this action).
         """

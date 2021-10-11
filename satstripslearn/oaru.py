@@ -118,20 +118,11 @@ class OaruAlgorithm:
                     del self.action_library[a.name]
                     self.action_library[parent_left.name] = parent_left
                     self.action_library[parent_right.name] = parent_right
-        
-        
-    def refactor_action(self, action):
-        unchecked_actions = self.action_library
-        for pre_state, post_state in self.negative_examples:
-            done = False
-            while not done:
-                updated_unchecked_actions = {}
-                for action in action_library.
-                done = False
-            if action.can_produce_transition(pre_state, post_state):
+         
         
     def add_negative_example(self, pre_state, post_state):
-        self.negative_examples.append((pre_state, post_state))
+        neg_example = (pre_state, post_state)
+        self.negative_examples.append(neg_example)
         self.refactor()
         assert not (pre_state.is_uncertain() or post_state.is_uncertain()), "This feature only works with fully observable states"
         # TODO

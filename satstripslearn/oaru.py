@@ -56,7 +56,7 @@ class OaruAlgorithm:
         for a_lib in self.action_library.values():
             a_u = cluster(a_lib, a, True, self.timeout)
             dist_u = float('inf') if a_u is None else a_u.parent.distance
-            if dist_u < dist_found_u:
+            if dist_u < dist_found_u and not self._allows_negative_example(a_u):
                 additional_info = a_u.parent.additional_info
                 mem_z3 = additional_info["z3_stats"]["memory"]
                 self.peak_z3_memory = max(self.peak_z3_memory, mem_z3)
@@ -118,26 +118,20 @@ class OaruAlgorithm:
                     del self.action_library[a.name]
                     self.action_library[parent_left.name] = parent_left
                     self.action_library[parent_right.name] = parent_right
+            unchecked_actions = unchecked_actions_next
          
+    def _allows_negative_example(self, action):
+        for neg_example in self.negative_examples:
+            if action.can_produce_transition(*neg_example):
+                return True
+        return False
         
     def add_negative_example(self, pre_state, post_state):
+        assert not (pre_state.is_uncertain() or post_state.is_uncertain()), "This feature only works with fully observable states"
         neg_example = (pre_state, post_state)
         self.negative_examples.append(neg_example)
-        self.refactor()
-        assert not (pre_state.is_uncertain() or post_state.is_uncertain()), "This feature only works with fully observable states"
-        # TODO
-        # ~ a_g = self._action_from_transition(pre_state, post_state)
-        # ~ review_actions = list(self.action_library)
-        # ~ while review_actions:
-            # ~ next_set_of_review_actions = []
-            # ~ for a_lib in review_actions:
-                # ~ a_u = cluster(a_g, a_lib)
-                # ~ if not check_updated(a_u, a_lib):
-                    # ~ # a_lib allows the transition pre_state -> post_state, so it has to be split
-                    # ~ # to disallow the negative example
-                    # ~ del 
-        
-        raise NotImplementedError()
+        for action in list(self.action_library.values()):
+            self._refactor(action, neg_example)
 
     def draw_graph(self, outdir, coarse=False, view=False, cleanup=True,
             filename="g.gv", format="pdf", **kwargs):

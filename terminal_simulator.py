@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import random
 from satstripslearn.state import State
 
@@ -35,6 +37,8 @@ class Game:
         return "\n".join(lines)
         
     def pick_and_place(self, token, destination):
+        token = token.lower()
+        destination = destination.lower()
         found = False
         for row in self.board:
             for j in range(5):
@@ -44,7 +48,7 @@ class Game:
                     break
         assert found
         row_index = 4 - int(destination[1])
-        col_index = ord(destination[0]) - ord('A')
+        col_index = ord(destination[0]) - ord('a')
         assert self.board[row_index][col_index] is None
         self.board[row_index][col_index] = token
         self.time_step += 1
@@ -78,6 +82,22 @@ class Game:
                     predicates.add(("less-than", str(i), str(j)))
         predicates.add(("time-step", str(self.time_step)))
         return State(predicates)
+
+
+def main():
+    from satstripslearn.oaru import OaruAlgorithm
+    oaru = OaruAlgorithm()
+    game = Game("king", 73)
+    print(game)
+    state1 = game.get_state()
+    game.pick_and_place("k", "B2")
+    print(game)
+    state2 = game.get_state()
+    a,_ = oaru.action_recognition(state1, state2)
+    print(a)
+    print(sorted(state1.atoms))
+    print(a.can_produce_transition(state1, state2))
+    
 
 
 if __name__ == "__main__":

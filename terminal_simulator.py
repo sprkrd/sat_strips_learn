@@ -95,7 +95,15 @@ def main():
     state2 = game.get_state()
     a,_ = oaru.action_recognition(state1, state2)
     print(a)
-    print(sorted(state1.atoms))
+    # ~ print(sorted(state1.atoms))
+    # ~ print(sorted(state1.atoms) == [f.atom for f in a.get_features_of_type("pre")])
+    print(sorted(a.apply(state1).atoms))
+    print(sorted(state2.atoms))
+    print(a.apply(state1) == state2)
+    
+    for x in a.all_instantiations(state1):
+        print(">>>", x)
+    
     print(a.can_produce_transition(state1, state2))
     
 

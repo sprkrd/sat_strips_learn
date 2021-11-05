@@ -138,7 +138,7 @@ class Feature:
         self.atom = lift_atom(self.atom, ref_dict)
         
     def is_ground(self):
-        return all(map(is_lifted, self.atom[1:]))
+        return not any(map(is_lifted, self.atom[1:]))
 
     def __hash__(self):
         return hash((self.atom,self.feature_type,self.certain))

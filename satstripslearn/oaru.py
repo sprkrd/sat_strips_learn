@@ -40,6 +40,7 @@ class OaruAlgorithm:
         self.cpu_times = []
         self.peak_z3_memory = 0
         self.negative_examples = []
+        
 
     def _action_from_transition(self, s, s_next):
         a = Action.from_transition(s, s_next)

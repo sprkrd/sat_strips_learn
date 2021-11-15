@@ -11,6 +11,7 @@ class Game:
         self.board = [[None]*5 for _ in range(4)]
         self.game_name = game_name
         self.time_step = 0
+        self.previous_token = "none"
         if game_name == "king":
             row = rng.randint(0,3)
             col = rng.randint(0,4)
@@ -52,6 +53,7 @@ class Game:
         assert self.board[row_index][col_index] is None
         self.board[row_index][col_index] = token
         self.time_step += 1
+        self.previous_token = token
         
     def get_state(self):
         predicates = set()
@@ -80,15 +82,20 @@ class Game:
             for i in range(10):
                 for j in range(i+1,10):
                     predicates.add(("less-than", str(i), str(j)))
-        # ~ predicates.add(("time-step", str(self.time_step)))
+        # for i in range(50):
+            # predicates.add(("timestep", str(i)))
+        # for i in range(1,50):
+            # predicates.add(("next-timestep", str(i-1), str(i)))
+        predicates.add(("previous-token", self.previous_token))
+        # predicates.add(("current-timestep", str(self.time_step)))
         return State(predicates)
 
 
 def main():
     from satstripslearn.oaru import OaruAlgorithm, STANDARD_FILTERS
     from satstripslearn.utils import goal_match
-    # ~ oaru = OaruAlgorithm(filters=[{"min_score": 0, "fn": min}])
-    oaru = OaruAlgorithm()
+    oaru = OaruAlgorithm(filters=[{"min_score": 0, "fn": min}])
+    # oaru = OaruAlgorithm()
     game = Game("king", 73)
     print(game)
     state1 = game.get_state()

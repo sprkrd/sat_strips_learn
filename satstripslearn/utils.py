@@ -214,7 +214,7 @@ def goal_match(atoms, goal):
         else:
             for atom in atoms:
                 sigma_new = match_unify(atom, goal[index], sigma.copy())
-                if sigma_new:
+                if sigma_new is not None:
                     stack.append((index+1, sigma_new))
     
 

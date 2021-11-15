@@ -80,12 +80,14 @@ class Game:
             for i in range(10):
                 for j in range(i+1,10):
                     predicates.add(("less-than", str(i), str(j)))
-        predicates.add(("time-step", str(self.time_step)))
+        # ~ predicates.add(("time-step", str(self.time_step)))
         return State(predicates)
 
 
 def main():
-    from satstripslearn.oaru import OaruAlgorithm
+    from satstripslearn.oaru import OaruAlgorithm, STANDARD_FILTERS
+    from satstripslearn.utils import goal_match
+    # ~ oaru = OaruAlgorithm(filters=[{"min_score": 0, "fn": min}])
     oaru = OaruAlgorithm()
     game = Game("king", 73)
     print(game)
@@ -93,18 +95,16 @@ def main():
     game.pick_and_place("k", "B2")
     print(game)
     state2 = game.get_state()
-    a,_ = oaru.action_recognition(state1, state2)
+    game.pick_and_place("k", "C3")
+    state3 = game.get_state()
+    print(game)
+    oaru.action_recognition(state1, state2)
+    oaru.action_recognition(state2, state3)
+    a = next(iter(oaru.action_library.values()))
+    oaru.draw_graph(".", view=True, atom_limit_middle=1000)
     print(a)
-    # ~ print(sorted(state1.atoms))
-    # ~ print(sorted(state1.atoms) == [f.atom for f in a.get_features_of_type("pre")])
-    print(sorted(a.apply(state1).atoms))
-    print(sorted(state2.atoms))
-    print(a.apply(state1) == state2)
     
-    for x in a.all_instantiations(state1):
-        print(">>>", x)
-    
-    print(a.can_produce_transition(state1, state2))
+    # ~ print(a.can_produce_transition(state1, state2))
     
 
 

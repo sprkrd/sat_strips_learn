@@ -40,7 +40,6 @@ class OaruAlgorithm:
         self.cpu_times = []
         self.peak_z3_memory = 0
         self.negative_examples = []
-        
 
     def _action_from_transition(self, s, s_next):
         a = Action.from_transition(s, s_next)
@@ -126,13 +125,33 @@ class OaruAlgorithm:
             if action.can_produce_transition(*neg_example):
                 return True
         return False
+
+    def _remerge(self):
+        action_list = list(self.action_library.values())
+        for i, action_1 in enumerate(action_list):
+            for action_2 in action_list[i+1:]:
+                a_u = cluster(action_1, action_2, False, self.timeout)
+                if a_u is not None and not self._allows_negative_example(a_u):
+                    del self.action_library[action_1.name]
+                    del self.action_library[action_2.name]
+                    self.action_library[a_u.name] = a_u
+                    return True
+        return False
+
         
     def add_negative_example(self, pre_state, post_state):
         assert not (pre_state.is_uncertain() or post_state.is_uncertain()), "This feature only works with fully observable states"
+
         neg_example = (pre_state, post_state)
         self.negative_examples.append(neg_example)
+
         for action in list(self.action_library.values()):
             self._refactor(action, neg_example)
+
+        while self._remerge():
+            pass
+
+        action_names = list(self.action_library.keys())
 
     def draw_graph(self, outdir, coarse=False, view=False, cleanup=True,
             filename="g.gv", format="pdf", **kwargs):

@@ -3,7 +3,6 @@
 import random
 from satstripslearn.state import State
 
-
 class Game:
     def __init__(self, game_name, seed=None):
         rng = random.Random(seed)
@@ -12,6 +11,7 @@ class Game:
         self.game_name = game_name
         self.time_step = 0
         self.previous_token = "none"
+        self.previous_destination = "none"
         if game_name == "king":
             row = rng.randint(0,3)
             col = rng.randint(0,4)
@@ -54,6 +54,7 @@ class Game:
         self.board[row_index][col_index] = token
         self.time_step += 1
         self.previous_token = token
+        self.previous_destination = destination
         
     def get_state(self):
         predicates = set()
@@ -87,33 +88,82 @@ class Game:
         # for i in range(1,50):
             # predicates.add(("next-timestep", str(i-1), str(i)))
         predicates.add(("previous-token", self.previous_token))
+        predicates.add(("previous-destination", self.previous_destination))
         # predicates.add(("current-timestep", str(self.time_step)))
         return State(predicates)
 
 
+def propose_example(game, oaru, history_updates, history_proposals, min_non_updated, min_no_proposals, rng=random):
+    crit1 = len(history_updates) >= min_non_updated and True not in history_updates[-min_non_updated:]
+    crit2 = len(history_proposals) >= min_no_proposals and True not in history_proposals[-min_no_proposals:]
+    if not crit1 or not crit2:
+        return None
+    prev_state = game.get_state()
+    actions = []
+    for action in oaru.action_library.values():
+        actions += list(action.all_instantiations(prev_state))
+    if not actions:
+        return None
+    return rng.choice(actions)
+        
+
 def main():
-    from satstripslearn.oaru import OaruAlgorithm, STANDARD_FILTERS
-    from satstripslearn.utils import goal_match
-    oaru = OaruAlgorithm(filters=[{"min_score": 0, "fn": min}])
-    # oaru = OaruAlgorithm()
-    game = Game("king", 73)
-    print(game)
-    state1 = game.get_state()
-    game.pick_and_place("k", "B2")
-    print(game)
-    state2 = game.get_state()
-    game.pick_and_place("k", "C3")
-    state3 = game.get_state()
-    print(game)
-    oaru.action_recognition(state1, state2)
-    oaru.action_recognition(state2, state3)
-    a = next(iter(oaru.action_library.values()))
-    oaru.draw_graph(".", view=True, atom_limit_middle=1000)
-    print(a)
+    from satstripslearn.oaru import OaruAlgorithm
+    from itertools import count
+    random.seed(100)
+    game_name = input("Game? ")
+    seed = int(input("Seed? "))
+    ask_frequency = int(input("Example frequency? "))
+            
     
-    # ~ print(a.can_produce_transition(state1, state2))
+    game = Game(game_name, seed)
+    oaru = OaruAlgorithm(filters=[{"min_score": 0, "fn": min}], normalize_dist=True, double_filtering=True)
     
-
-
+    history_updates = []
+    history_proposals = []
+    
+    for i in count(0):
+        print("Timestep ", game.time_step)
+        print("---------------")
+        print(game)
+        
+        if ask_frequency == 2:
+            example = propose_example(game, oaru, [False], [False], 1, 1)
+        elif ask_frequency == 1:
+            example = propose_example(game, oaru, history_updates, history_proposals, 3, 3)
+        else:
+            example = None
+            
+        if example is not None:    
+            print("Proposing following example...")
+            print(example)
+            negative_example = input("Is it a valid example? (y/n) ") == "n"
+            if negative_example:
+                prev_state = game.get_state()
+                next_state = example.apply(prev_state)
+                assert next_state is not None
+                oaru.add_negative_example(prev_state, next_state)
+                oaru.draw_graph("terminal_demo", filename=f"demo_{i}_neg.gv", view=True)
+                print(f"{len(oaru.action_library)} action(s) after negative example")
+        
+        move = input("Next move? ").strip()
+        if move == "restart":
+            seed = seed+1
+            game = Game(game_name, seed)
+            continue
+        elif move == "quit":
+            break
+        s_prev = game.get_state()
+        game.pick_and_place(*move.split())
+        s_next = game.get_state()
+        a_g, updated = oaru.action_recognition(s_prev, s_next)
+        oaru.draw_graph("terminal_demo", filename=f"demo_{i}.gv", view=True)
+        print(f"{len(oaru.action_library)} action(s) after demonstration")
+        
+        history_updates.append(updated)
+        history_proposals.append(example is not None)
+        print()
+        
+            
 if __name__ == "__main__":
     main()

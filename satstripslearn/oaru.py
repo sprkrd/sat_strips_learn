@@ -31,11 +31,13 @@ def check_updated(a0, a1):
 
 
 class OaruAlgorithm:
-    def __init__(self, action_library=None, filters=None, timeout=None):
+    def __init__(self, action_library=None, filters=None, timeout=None, normalize_dist=False, double_filtering=False):
         self.action_library = action_library or {}
         self.filters = filters or [None]
         self._current_filter_level = 0
         self.timeout = timeout
+        self.normalize_dist = normalize_dist
+        self.double_filtering = double_filtering
         self.wall_times = []
         self.cpu_times = []
         self.peak_z3_memory = 0
@@ -54,7 +56,10 @@ class OaruAlgorithm:
         found_u = None
         dist_found_u = float('inf')
         for a_lib in self.action_library.values():
-            a_u = cluster(a_lib, a, True, self.timeout)
+            a_u = cluster(a_lib, a, True, self.timeout, self.normalize_dist)
+            feature_filter = self.filters[self._current_filter_level]
+            if a_u is not None and feature_filter is not None and self.double_filtering:
+                a_u = a_u.filter_features(**feature_filter)
             dist_u = float('inf') if a_u is None else a_u.parent.distance
             if dist_u < dist_found_u and not self._allows_negative_example(a_u):
                 additional_info = a_u.parent.additional_info
@@ -126,17 +131,21 @@ class OaruAlgorithm:
                 return True
         return False
 
-    def _remerge(self):
+    def _remerge(self, already_checked=None):
+        already_checked = already_checked or set()
         action_list = list(self.action_library.values())
         for i, action_1 in enumerate(action_list):
             for action_2 in action_list[i+1:]:
-                a_u = cluster(action_1, action_2, False, self.timeout)
+                if (action_1,action_2) in already_checked or (action_2,action_1) in already_checked:
+                    continue
+                already_checked.add((action_1, action_2))
+                a_u = cluster(action_1, action_2, False, self.timeout, self.normalize_dist)
                 if a_u is not None and not self._allows_negative_example(a_u):
                     del self.action_library[action_1.name]
                     del self.action_library[action_2.name]
                     self.action_library[a_u.name] = a_u
-                    return True
-        return False
+                    return True, already_checked
+        return False, already_checked
 
         
     def add_negative_example(self, pre_state, post_state):
@@ -147,11 +156,10 @@ class OaruAlgorithm:
 
         for action in list(self.action_library.values()):
             self._refactor(action, neg_example)
-
-        while self._remerge():
-            pass
-
-        action_names = list(self.action_library.keys())
+            
+        merged, already_checked = self._remerge()
+        while merged:
+            merged, already_checked = self._remerge(already_checked)
 
     def draw_graph(self, outdir, coarse=False, view=False, cleanup=True,
             filename="g.gv", format="pdf", **kwargs):

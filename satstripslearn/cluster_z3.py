@@ -34,7 +34,7 @@ def amo(variables):
     return constraints
 
 
-def cluster(left, right, include_additional_info=False, timeout=None):
+def cluster(left, right, include_additional_info=False, timeout=None, normalize_distance=False):
     # TODO this function is a bit too long! At some point we should break it into
     # smaller chunks.
 
@@ -46,7 +46,8 @@ def cluster(left, right, include_additional_info=False, timeout=None):
     objects_left = left.get_referenced_objects()
     objects_right = right.get_referenced_objects()
 
-    W_soft_preserve = 2*(min(len(objects_left), len(objects_right)) + 1)
+    # ~ W_soft_preserve = 2*(min(len(objects_left), len(objects_right)) + 1)
+    W_soft_preserve = 2*min(len(objects_left), len(objects_right)) + 1
 
     grouped_features_left = left.get_grouped_features()
     grouped_features_right = right.get_grouped_features()
@@ -184,6 +185,12 @@ def cluster(left, right, include_additional_info=False, timeout=None):
     model = o.model()
     objectives = o.objectives()[0]
     dist = model.eval(o.objectives()[0]).as_long() / W_soft_preserve
+    if normalize_distance:
+        len_pre_left = len(grouped_features_left["pre"])
+        len_pre_right = len(grouped_features_right["pre"])
+        min_dist = abs(len_pre_left - len_pre_right)
+        max_dist = len_pre_left + len_pre_right + (W_soft_preserve-1)/W_soft_preserve
+        dist = (dist - min_dist) / max_dist
 
     sigma_left = {}
     sigma_right = {}

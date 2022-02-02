@@ -110,13 +110,13 @@ def lift_atom(atom, ref_dict):
 def inverse_map(d):
     inv = {v:k for k,v in d.items()}
     return inv
-    
-    
+
+
 def match_unify(refatom, atom, sigma=None):
     """
     Finds, if possible, a substitution from variables to constants,
     making a atom equal to a reference atom.
-    
+
     Parameters
     ----------
     refatom : tuple
@@ -131,7 +131,7 @@ def match_unify(refatom, atom, sigma=None):
         A dictionary from variables to constants (both str). By default,
         it's None, meaning that no partial or total substitution should
         be considered by this function.
-        
+
     Return
     ------
     out : dict
@@ -140,7 +140,7 @@ def match_unify(refatom, atom, sigma=None):
         None is returned instead. If sigma, in the parameters, was set
         to anything different from None, all the substitutions not forced
         by the matching process are retained.
-        
+
     Examples
     --------
     >>> match_unify(("on","a","b"), ("on", "X", "Y")) == {"X": "a", "Y": "b"}
@@ -154,7 +154,7 @@ def match_unify(refatom, atom, sigma=None):
     >>> match_unify(("dummy",), ("ducky",)) is None
     True
     """
-    
+
     if sigma is None:
         sigma = {}
     if refatom[0] != atom[0] or len(refatom) != len(atom):
@@ -166,16 +166,16 @@ def match_unify(refatom, atom, sigma=None):
         elif obj != ref_obj:
             return None
     return sigma
-    
-    
+
+
 def goal_match(atoms, goal):
     """
     Tries to perform a Prolog-like query in which a goal pattern (a set
-    of zero or more atoms) is matched against a database of atoms. 
+    of zero or more atoms) is matched against a database of atoms.
     The objective of this function is to find all the substitutions from
     variables to constants s.t. the goal pattern is contained within the
     given set of atoms.
-    
+
     Parameters
     ----------
     atoms : iterable
@@ -185,7 +185,7 @@ def goal_match(atoms, goal):
         A collection of atoms, possibly with variables, that constitute
         a pattern. This function's objective is to find a substitution
         from variables to constants s.t. goal is a subset of atoms.
-    
+
     Return
     ------
     out : generator
@@ -193,7 +193,7 @@ def goal_match(atoms, goal):
         representing the substitutions that must take place so goal is
         contained within atoms. If you want all the substitutions stored
         in a list, use list(goal_match(...)).
-    
+
     Examples
     --------
     >>> atoms = [("on", "a", "b"), ("on", "b", "c"), ("ontable", "c"),
@@ -203,28 +203,44 @@ def goal_match(atoms, goal):
     [[('X', 'a'), ('Y', 'b'), ('Z', 'c')]]
     >>> sorted(sorted(d.items()) for d in goal_match(atoms, [("ontable", "X")]))
     [[('X', 'c')], [('X', 'd')], [('X', 'e')]]
-    >>> sorted(sorted(d.items()) for d in goal_match(atoms, [("on", "X", "X")]))
+    >>> sorted(sorted(d.items()) for d in goal_match(atoms, [("ond", "X", "X")]))
     []
     """
+    # group atoms according to role name (predicate symbol)
+    grouped_atoms = {}
+    for atom in atoms:
+        try:
+            grouped_atoms[atom[0]].append(atom)
+        except KeyError:
+            grouped_atoms[atom[0]] = [atom]
+    # sort goal formula, arranging first
+    try:
+        goal = sorted(goal, key=lambda atom: len(grouped_atoms[atom[0]]))
+    except KeyError:
+        return
     stack = [(0, {})]
     while stack:
         index, sigma = stack.pop()
         if index == len(goal):
             yield sigma
+        elif all(not is_lifted(arg) or arg in sigma for arg in goal[index][1:]):
+            goal_atom_replaced = replace(goal[index], sigma)
+            if goal_atom_replaced in grouped_atoms[goal[index][0]]:
+                stack.append((index+1, sigma))
         else:
-            for atom in atoms:
+            for atom in grouped_atoms[goal[index][0]]:
                 sigma_new = match_unify(atom, goal[index], sigma.copy())
                 if sigma_new is not None:
                     stack.append((index+1, sigma_new))
-    
+
 
 def dict_leq(d1, d2):
     for k, v in d1.items():
         if v > d2.get(k, 0):
             return False
     return True
-    
-    
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()

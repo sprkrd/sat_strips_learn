@@ -134,6 +134,9 @@ class Feature:
         """
         return Feature(replace(self.atom, sigma), self.certain, self.feature_type)
 
+    def get_signature(self):
+        return (self.atom[0], len(self.atom)-1)
+
     def lift_atom(self, ref_dict):
         self.atom = lift_atom(self.atom, ref_dict)
         

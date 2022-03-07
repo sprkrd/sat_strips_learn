@@ -91,13 +91,16 @@ def run_planning_agent_demo(env, oaru, outdir="out", fps=3, verbose=False, seed=
         obs, reward, done, _ = env.step(action)
         # env.render()
         state_trajectory.append( (env.render(), get_state(env, type_predicates)) )
-        record_transition(state_trajectory[-2], state_trajectory[-1], oaru)
+        record_transition(state_trajectory[-2], state_trajectory[-1], oaru, outdir)
         tot_reward += reward
         if verbose:
             tqdm.tqdm.write(f"Rew: {reward}")
 
         if done:
             break
+
+    with open(f"{outdir}/domain.pddl", "w") as f:
+        oaru.dump_pddl_domain(f)
 
     if verbose:
         # print("Final obs:", obs)

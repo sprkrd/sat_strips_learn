@@ -1,5 +1,5 @@
 from .cluster_z3 import cluster
-from .utils import inverse_map, Timer
+from .utils import inverse_map, Timer, atom_to_pddl
 from .action import Action
 
 from .viz import draw_cluster_graph, draw_coarse_cluster_graph
@@ -160,6 +160,27 @@ class OaruAlgorithm:
         merged, already_checked = self._remerge()
         while merged:
             merged, already_checked = self._remerge(already_checked)
+
+    def get_all_predicate_signatures(self):
+        predicate_signatures = set()
+        for action in self.action_library.values():
+            for feat in action.features:
+                predicate_signatures.add(feat.get_signature())
+        return predicate_signatures
+
+    def dump_pddl_domain(self, out, domain_name="oaru_domain"):
+        out.write(f"(define (domain {domain_name})\n\n")
+        out.write(f"(:requirements :strips)\n\n")
+        out.write(f"(:predicates\n")
+        for predicate_symbol, arity in self.get_all_predicate_signatures():
+            generic_predicate = (predicate_symbol,) + tuple(f"X{i}" for i in range(arity))
+            out.write(atom_to_pddl(generic_predicate))
+            out.write("\n")
+        out.write(")")
+        for action in self.action_library.values():
+            out.write("\n\n")
+            out.write(action.to_pddl())
+        out.write(f"\n)")
 
     def draw_graph(self, outdir, coarse=False, view=False, cleanup=True,
             filename="g.gv", format="pdf", **kwargs):

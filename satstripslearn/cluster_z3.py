@@ -47,7 +47,8 @@ def cluster(left, right, include_additional_info=False, timeout=None, normalize_
     objects_right = right.get_referenced_objects()
 
     # ~ W_soft_preserve = 2*(min(len(objects_left), len(objects_right)) + 1)
-    W_soft_preserve = 2*min(len(objects_left), len(objects_right)) + 1
+    # W_soft_preserve = 2*min(len(objects_left), len(objects_right)) + 1
+    W_soft_preserve = min(len(objects_left), len(objects_right)) + 1
 
     grouped_features_left = left.get_grouped_features()
     grouped_features_right = right.get_grouped_features()

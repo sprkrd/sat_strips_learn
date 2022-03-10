@@ -83,13 +83,13 @@ class Game:
             for i in range(10):
                 for j in range(i+1,10):
                     predicates.add(("less-than", str(i), str(j)))
-        # for i in range(50):
-            # predicates.add(("timestep", str(i)))
-        # for i in range(1,50):
-            # predicates.add(("next-timestep", str(i-1), str(i)))
-        predicates.add(("previous-token", self.previous_token))
-        predicates.add(("previous-destination", self.previous_destination))
-        # predicates.add(("current-timestep", str(self.time_step)))
+        for i in range(50):
+            predicates.add(("timestep", f"t{i}"))
+        for i in range(1,50):
+            predicates.add(("next-timestep", f"t{i-1}", f"t{i}"))
+        # predicates.add(("previous-token", self.previous_token))
+        # predicates.add(("previous-destination", self.previous_destination))
+        predicates.add(("current-timestep", f"t{self.time_step}"))
         return State(predicates)
 
 
@@ -117,7 +117,7 @@ def main():
             
     
     game = Game(game_name, seed)
-    oaru = OaruAlgorithm(filters=[{"min_score": 0, "fn": min}], normalize_dist=True, double_filtering=True)
+    oaru = OaruAlgorithm(filters=[{"min_score": -1, "fn": min}], normalize_dist=False, double_filtering=True)
     
     history_updates = []
     history_proposals = []

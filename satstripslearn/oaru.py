@@ -1,16 +1,22 @@
 from .cluster_z3 import cluster
 from .utils import inverse_map, Timer, atom_to_pddl
 from .action import Action
-
+from .feature_filter import FeatureFilter
 from .viz import draw_cluster_graph, draw_coarse_cluster_graph
 
 
+# STANDARD_FILTERS = [
+    # None,
+    # {"min_score": -1, "fn": max},
+    # {"min_score": -1, "fn": min},
+    # {"min_score": -1, "fn": sum},
+    # {"min_score": -0.5, "fn": lambda t: sum(t) / len(t) if t else 0},
+# ]
+
 STANDARD_FILTERS = [
     None,
-    {"min_score": -1, "fn": max},
-    {"min_score": -1, "fn": min},
-    {"min_score": -1, "fn": sum},
-    {"min_score": -0.5, "fn": lambda t: sum(t) / len(t) if t else 0},
+    FeatureFilter(1),
+    FeatureFilter(0),
 ]
 
 
@@ -47,10 +53,10 @@ class OaruAlgorithm:
         a = Action.from_transition(s, s_next)
         feature_filter = self.filters[self._current_filter_level]
         if feature_filter is not None:
-            a = a.filter_features(**feature_filter)
+            a = feature_filter(a)
         return a
 
-    def _action_recognition(self, s, s_next):
+    def _action_recognition(self, s, s_next, ):
         a = self._action_from_transition(s, s_next)
         replace_action = None
         found_u = None
@@ -59,7 +65,8 @@ class OaruAlgorithm:
             a_u = cluster(a_lib, a, True, self.timeout, self.normalize_dist)
             feature_filter = self.filters[self._current_filter_level]
             if a_u is not None and feature_filter is not None and self.double_filtering:
-                a_u = a_u.filter_features(**feature_filter)
+                # a_u = a_u.filter_features(**feature_filter)
+                a_u = feature_filter(a_u)
             dist_u = float('inf') if a_u is None else a_u.parent.distance
             if dist_u < dist_found_u and not self._allows_negative_example(a_u):
                 additional_info = a_u.parent.additional_info

@@ -2,6 +2,7 @@
 
 import random
 from satstripslearn.state import State
+from satstripslearn.feature_filter import FeatureFilter
 
 class Game:
     def __init__(self, game_name, seed=None):
@@ -105,7 +106,18 @@ def propose_example(game, oaru, history_updates, history_proposals, min_non_upda
     if not actions:
         return None
     return rng.choice(actions)
-        
+
+
+def edge_creator(atom, atom_type):
+    edges = {}
+    if atom_type != "deleted":
+        if atom[0] == "at":
+            edges[(atom[1],atom[2])] = 0
+            edges[(atom[2],atom[1])] = 0
+        elif atom[0] in ("left", "down", "right", "up"):
+            edges[(atom[1],atom[2])] = 1
+    return edges
+
 
 def main():
     from satstripslearn.oaru import OaruAlgorithm
@@ -117,7 +129,8 @@ def main():
             
     
     game = Game(game_name, seed)
-    oaru = OaruAlgorithm(filters=[{"min_score": -1, "fn": min}], normalize_dist=False, double_filtering=True)
+    oaru = OaruAlgorithm(filters=[FeatureFilter(0,edge_creator)], normalize_dist=False, double_filtering=True)
+    # oaru = OaruAlgorithm(filters=[{"min_score": -1, "fn": min}], normalize_dist=False, double_filtering=True)
     
     history_updates = []
     history_proposals = []

@@ -241,6 +241,28 @@ def dict_leq(d1, d2):
     return True
 
 
+def dump_pddl_problem(domain_name, problem_name, init, goal, out):
+    objects = set()
+    for atom in chain(init,goal):
+        objects.update(atom[1:])
+    out.write(f"(define (problem {problem_name}) (:domain {domain_name})\n")
+    out.write("(:objects\n")
+    for obj in objects:
+        out.write(obj)
+        out.write("\n")
+    out.write(")\n")
+    out.write("(:init\n")
+    for atom in init:
+        out.write(atom_to_pddl(atom))
+        out.write("\n")
+    out.write(")\n")
+    out.write("(:goal\n")
+    for atom in goal:
+        out.write(atom_to_pddl(atom))
+        out.write("\n")
+    out.write(")")
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()

@@ -49,21 +49,21 @@ class OaruAlgorithm:
         self.peak_z3_memory = 0
         self.negative_examples = []
 
-    def _action_from_transition(self, s, s_next):
+    def _action_from_transition(self, s, s_next, force_filter):
         a = Action.from_transition(s, s_next)
-        feature_filter = self.filters[self._current_filter_level]
+        feature_filter = force_filter or self.filters[self._current_filter_level]
         if feature_filter is not None:
             a = feature_filter(a)
         return a
 
-    def _action_recognition(self, s, s_next, ):
-        a = self._action_from_transition(s, s_next)
+    def _action_recognition(self, s, s_next, force_filter):
+        a = self._action_from_transition(s, s_next, force_filter)
         replace_action = None
         found_u = None
         dist_found_u = float('inf')
         for a_lib in self.action_library.values():
             a_u = cluster(a_lib, a, True, self.timeout, self.normalize_dist)
-            feature_filter = self.filters[self._current_filter_level]
+            feature_filter = force_filter or self.filters[self._current_filter_level]
             if a_u is not None and feature_filter is not None and self.double_filtering:
                 # a_u = a_u.filter_features(**feature_filter)
                 a_u = feature_filter(a_u)
@@ -97,12 +97,12 @@ class OaruAlgorithm:
             return True
         return False
 
-    def action_recognition(self, s, s_next, logger=None):
+    def action_recognition(self, s, s_next, logger=None, force_filter=None):
         timer = Timer()
         a_g, updated = None, None
         while a_g is None:
             try:
-                a_g, updated = self._action_recognition(s, s_next)
+                a_g, updated = self._action_recognition(s, s_next, force_filter)
             except TimeoutError:
                 increased_lever = self.increase_filter_level()
                 if not increased_lever:
@@ -115,7 +115,7 @@ class OaruAlgorithm:
         self.wall_times.append(round(elapsed_cpu*1000))
         self.cpu_times.append(round(elapsed_wall*1000))
         return a_g, updated
-        
+
     def _refactor(self, action, neg_example):
         unchecked_actions = [action]
         while unchecked_actions:
@@ -131,7 +131,7 @@ class OaruAlgorithm:
                     self.action_library[parent_left.name] = parent_left
                     self.action_library[parent_right.name] = parent_right
             unchecked_actions = unchecked_actions_next
-         
+
     def _allows_negative_example(self, action):
         for neg_example in self.negative_examples:
             if action.can_produce_transition(*neg_example):
@@ -154,7 +154,7 @@ class OaruAlgorithm:
                     return True, already_checked
         return False, already_checked
 
-        
+
     def add_negative_example(self, pre_state, post_state):
         assert not (pre_state.is_uncertain() or post_state.is_uncertain()), "This feature only works with fully observable states"
 
@@ -163,7 +163,7 @@ class OaruAlgorithm:
 
         for action in list(self.action_library.values()):
             self._refactor(action, neg_example)
-            
+
         merged, already_checked = self._remerge()
         while merged:
             merged, already_checked = self._remerge(already_checked)
@@ -177,8 +177,8 @@ class OaruAlgorithm:
 
     def dump_pddl_domain(self, out, domain_name="oaru_domain"):
         out.write(f"(define (domain {domain_name})\n\n")
-        out.write(f"(:requirements :strips)\n\n")
-        out.write(f"(:predicates\n")
+        out.write("(:requirements :strips)\n\n")
+        out.write("(:predicates\n")
         for predicate_symbol, arity in self.get_all_predicate_signatures():
             generic_predicate = (predicate_symbol,) + tuple(f"X{i}" for i in range(arity))
             out.write(atom_to_pddl(generic_predicate))

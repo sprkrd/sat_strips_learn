@@ -3,6 +3,7 @@
 import random
 from satstripslearn.state import State
 from satstripslearn.feature_filter import FeatureFilter
+from satstripslearn.action import Action
 
 class Game:
     def __init__(self, game_name, seed=None):
@@ -24,7 +25,7 @@ class Game:
                 row = 2 + i//5
                 col = i%5
                 self.board[row][col] = str(num)
-        
+
     def __str__(self):
         lines = []
         for row_number, row in zip("4321", self.board):
@@ -37,7 +38,7 @@ class Game:
             lines.append("".join(line))
         lines.append("  ABCDE")
         return "\n".join(lines)
-        
+
     def pick_and_place(self, token, destination):
         token = token.lower()
         destination = destination.lower()
@@ -56,7 +57,7 @@ class Game:
         self.time_step += 1
         self.previous_token = token
         self.previous_destination = destination
-        
+
     def get_state(self):
         predicates = set()
         for row_number, row in zip("4321", self.board):
@@ -119,6 +120,14 @@ def edge_creator(atom, atom_type):
     return edges
 
 
+def goal_feature_filter(action):
+    features = []
+    for feat in action.features:
+        if feat.head in ("at","goal-achieved","less-than"):
+            features.append(feat)
+    return Action(action.name, features, action.parent)
+
+
 def main():
     from satstripslearn.oaru import OaruAlgorithm
     from itertools import count
@@ -126,28 +135,28 @@ def main():
     game_name = input("Game? ")
     seed = int(input("Seed? "))
     ask_frequency = int(input("Example frequency? "))
-            
-    
+
+
     game = Game(game_name, seed)
     oaru = OaruAlgorithm(filters=[FeatureFilter(0,edge_creator)], normalize_dist=False, double_filtering=True)
     # oaru = OaruAlgorithm(filters=[{"min_score": -1, "fn": min}], normalize_dist=False, double_filtering=True)
-    
+
     history_updates = []
     history_proposals = []
-    
+
     for i in count(0):
         print("Timestep ", game.time_step)
         print("---------------")
         print(game)
-        
+
         if ask_frequency == 2:
             example = propose_example(game, oaru, [False], [False], 1, 1)
         elif ask_frequency == 1:
             example = propose_example(game, oaru, history_updates, history_proposals, 3, 3)
         else:
             example = None
-            
-        if example is not None:    
+
+        if example is not None:
             print("Proposing following example...")
             print(example)
             negative_example = input("Is it a valid example? (y/n) ") == "n"
@@ -158,9 +167,13 @@ def main():
                 oaru.add_negative_example(prev_state, next_state)
                 oaru.draw_graph("terminal_demo", filename=f"demo_{i}_neg.gv", view=True)
                 print(f"{len(oaru.action_library)} action(s) after negative example")
-        
+
         move = input("Next move? ").strip()
         if move == "restart":
+            s_prev = game.get_state()
+            s_next = game.get_state()
+            s_next.atoms.add(("goal-achieved",))
+            a_g, updated = oaru.action_recognition(s_prev, s_next, force_filter=goal_feature_filter)
             seed = seed+1
             game = Game(game_name, seed)
             continue
@@ -172,11 +185,11 @@ def main():
         a_g, updated = oaru.action_recognition(s_prev, s_next)
         oaru.draw_graph("terminal_demo", filename=f"demo_{i}.gv", view=True)
         print(f"{len(oaru.action_library)} action(s) after demonstration")
-        
+
         history_updates.append(updated)
         history_proposals.append(example is not None)
         print()
-        
-            
+
+
 if __name__ == "__main__":
     main()

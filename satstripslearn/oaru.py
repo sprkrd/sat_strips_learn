@@ -1,7 +1,7 @@
 from .cluster_z3 import cluster
 from .utils import inverse_map, Timer, atom_to_pddl
 from .action import Action
-from .feature_filter import FeatureFilter
+from .feature_filter import ObjectGraphFilter, basic_object_filter
 from .viz import draw_cluster_graph, draw_coarse_cluster_graph
 
 
@@ -15,8 +15,8 @@ from .viz import draw_cluster_graph, draw_coarse_cluster_graph
 
 STANDARD_FILTERS = [
     None,
-    FeatureFilter(1),
-    FeatureFilter(0),
+    ObjectGraphFilter(1),
+    basic_object_filter,
 ]
 
 

@@ -2,7 +2,7 @@
 
 import random
 from satstripslearn.state import State
-from satstripslearn.feature_filter import FeatureFilter
+from satstripslearn.feature_filter import ObjectGraphFilter, basic_object_filter
 from satstripslearn.action import Action
 
 class Game:
@@ -120,14 +120,6 @@ def edge_creator(atom, atom_type):
     return edges
 
 
-def goal_feature_filter(action):
-    features = []
-    for feat in action.features:
-        if feat.head in ("at","goal-achieved","less-than"):
-            features.append(feat)
-    return Action(action.name, features, action.parent)
-
-
 def main():
     from satstripslearn.oaru import OaruAlgorithm
     from itertools import count
@@ -138,11 +130,13 @@ def main():
 
 
     game = Game(game_name, seed)
-    oaru = OaruAlgorithm(filters=[FeatureFilter(0,edge_creator)], normalize_dist=False, double_filtering=True)
+    oaru = OaruAlgorithm(filters=[basic_object_filter], normalize_dist=False, double_filtering=False)
     # oaru = OaruAlgorithm(filters=[{"min_score": -1, "fn": min}], normalize_dist=False, double_filtering=True)
 
     history_updates = []
     history_proposals = []
+    
+    touched_tokens = set()
 
     for i in count(0):
         print("Timestep ", game.time_step)
@@ -173,14 +167,18 @@ def main():
             s_prev = game.get_state()
             s_next = game.get_state()
             s_next.atoms.add(("goal-achieved",))
-            a_g, updated = oaru.action_recognition(s_prev, s_next, force_filter=goal_feature_filter)
+            a_g, updated = oaru.action_recognition(s_prev, s_next,
+                    force_filter=ObjectGraphFilter(0, edge_creator, touched_tokens))
             seed = seed+1
             game = Game(game_name, seed)
+            touched_tokens = set()
             continue
         elif move == "quit":
             break
+        token, dst = move.split()
+        touched_tokens.add(token)
         s_prev = game.get_state()
-        game.pick_and_place(*move.split())
+        game.pick_and_place(token, dst)
         s_next = game.get_state()
         a_g, updated = oaru.action_recognition(s_prev, s_next)
         oaru.draw_graph("terminal_demo", filename=f"demo_{i}.gv", view=True)

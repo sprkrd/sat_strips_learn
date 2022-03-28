@@ -49,24 +49,34 @@ def create_object_graph(action, edge_creator=default_edge_creator):
         new_edges = edge_creator(atom, atom_type)
         merge_and_simplify(new_edges, edges)
 
-    affected_objects = action.get_referenced_objects(
-            feature_types=["add", "del"], as_set=True)
-    nodes.add("affected_objects")
-    for obj in affected_objects:
-        edges[("affected_objects", obj)] = 0
-
     return DirectedWeightedGraph(nodes, edges)
 
 
+def basic_object_filter(action):
+    affected_objects = action.get_referenced_objects(feature_types=["add","del"], as_set=True)
+    filtered_features = []
+    for feat in action.features:
+        if all(arg in affected_objects for arg in feat.arguments):
+            filtered_features.append(feat)
+    return Action(action.name, filtered_features, action.parent)
 
-class FeatureFilter:
-    def __init__(self, max_distance, edge_creator=default_edge_creator):
+
+class ObjectGraphFilter:
+    def __init__(self, max_distance, edge_creator=default_edge_creator, root_objects=None):
         self.edge_creator = edge_creator
         self.max_distance = max_distance
+        self.root_objects = root_objects
 
     def __call__(self, action):
         object_graph = create_object_graph(action, self.edge_creator)
-        distances = object_graph.dijkstra("affected_objects")
+        
+        root_objects = self.root_objects or action.get_referenced_objects(
+            feature_types=["add", "del"], as_set=True)
+        object_graph.add_node("root_objects")
+        for obj in root_objects:
+            object_graph.add_edge("root_objects", obj, 0)
+        
+        distances = object_graph.dijkstra("root_objects")
         filtered_features = []
         for feat in action.features:
             feat_score = max((distances[arg] for arg in feat.arguments), default=0)

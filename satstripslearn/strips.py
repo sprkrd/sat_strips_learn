@@ -4,8 +4,20 @@ from itertools import islice
 ATOM_TYPES = ["pre", "add", "del"]
 
 
+class ObjectType(str):
+    def __call__(self, objname):
+        return Object(objname, self)
+
+    def __repr__(self):
+        return f"ObjectType({self})"
+
+
+ROOT_TYPE = ObjectType("object")
+
+
 class Object:
-    def __init__(self, name, objtype="object"):
+    def __init__(self, name, objtype=ROOT_TYPE):
+        objtype = objtype or ROOT_TYPE
         self._data = (name.lower(), objtype)
 
     @property
@@ -84,21 +96,11 @@ class Atom:
         return f"Atom({self})"
 
 
-# class LabeledAtom:
-    # def __init__(self, atom, certain=True, atom_type="pre"):
-        # assert atom_type in ATOM_TYPES
-        # self.atom = atom
-        # self.certain = certain
-        # self.atom_type = atom_typei
-
-
-
-
-class Predicate:
+class _Predicate:
     def __init__(self, head, *args, parent_domain=None):
         if len(args) == 1 and isinstance(args[0], int):
             arity, = args
-            args = ("object",) * arity
+            args = (ROOT_TYPE,) * arity
         self.head = head
         self.args = args
         self.parent_domain = parent_domain
@@ -143,8 +145,27 @@ class Predicate:
         # pass
 
 
-
 # class Domain:
+
+    # def __init__(self, name, predicates=None, type_hierarchy=None, actions=None):
+        # self.name = name
+        # self.predicates = predicates or []
+        # self.type_hierarchy = type_hierarchy
+        # if self.type_hierarchy is not None:
+            # self.type_hierarchy[ROOT_TYPE] = None
+        # self.actions = actions or []
+
+    # def declare_type(self, type_name, parent=ROOT_TYPE):
+        # objtype = ObjectType(type_name)
+        # if self.type_hierarchy is None:
+            # self.type_hierarchy = {ROOT_TYPE: None}
+
+        # if parent not in self.type_hierarchy:
+            # self.type_hierarchy[parent] = ROOT_TYPE
+        # self.type_hierarchy[type_name] = parent
+
+    # def declare_predicate(self, head, *args)
+        
 
     # def __init__(self, name, predicates=None, type_hierarchy=None, actions=None):
         # self.name = name

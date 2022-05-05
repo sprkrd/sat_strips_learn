@@ -9,7 +9,8 @@ class Object:
     Parameters
     ----------
     name : str
-        Name identifying the object.
+        Name identifying the object. If the name starts with a question mark
+        ("?"), the object is a variable.
     objtype : str
         Type of this object. By default, it's "object" (the root type).
 
@@ -78,9 +79,46 @@ class Object:
         return sigma.get(self, self)
 
     def is_variable(self):
+        """
+        Returns True if this object is a variable, False if it's a constant.
+
+        Return
+        ------
+        out : bool
+        """
         return self.name[0] == "?"
 
     def to_str(self, fmt="default", include_type=False):
+        """
+        String representation of the object.
+
+        Parameters
+        ----------
+        fmt : str
+            Format. Available formats are: (1) "default": a prolog-like format
+            in which variables start in uppercase, and constants in lowercase;
+            (2) "pddl": follows the PDDL convention in which variables start with a
+            question mark.
+        include_type: bool
+            Whether to include the type of the object in the sting representation or not.
+            In the PDDL format, the type is included as a dash followed by the type name.
+            In the default format, the type is included after a colon.
+
+        Return
+        ------
+        out : str
+
+        Examples
+        --------
+        >>> _x = Object("?x")
+        >>> blue = Object("blue", "color")
+        >>> print(_x.to_str(fmt="default", include_type=True))
+        X: object
+        >>> print(_x.to_str(fmt="pddl", include_type=True))
+        ?x - object
+        >>> print(blue.to_str(fmt="pddl", include_type=False))
+        blue
+        """
         ret = self.name
         if fmt == "default":
             if self.is_variable():

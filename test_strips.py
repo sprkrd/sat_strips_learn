@@ -30,10 +30,10 @@ state = {At(robot, Location("a1")), Adjacent(Location("a1"), Location("a2")), Ad
          
 objects = [robot, Location("a1"), Location("a2"), Location("b1"), Location("b2")]
 
-for ag in Move.all_groundings(objects, state):
-    print(ag)
+groundings = list(Move.all_groundings(objects, state))
 
-print(Move.to_str("pddl"))
-print(Move.ground(robot, src, dst))
+print(groundings[0].apply(state))
+
+print(groundings)
 
 print(dom)

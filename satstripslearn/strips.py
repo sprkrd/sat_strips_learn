@@ -3,19 +3,78 @@ from itertools import chain
 
 
 class Object:
+    """
+    Represents a STRIPS object.
+
+    Parameters
+    ----------
+    name : str
+        Name identifying the object.
+    objtype : str
+        Type of this object. By default, it's "object" (the root type).
+
+    Attributes
+    ----------
+    name : str
+        Same as the value passed as parameter.
+    objtype : str
+        Same as the value passed as parameter.
+    """
+    
     def __init__(self, name, objtype="object"):
-        objtype = objtype
+        """
+        See help(type(self)).
+        """
         self._data = (name.lower(), objtype)
 
     @property
     def name(self):
+        """
+        Convenience method to extract the name from the internal data
+        
+        Return
+        ------
+        name : str
+        """
         return self._data[0]
 
     @property
     def objtype(self):
+        """
+        Convenience method to extract the object type from the internal data
+        
+        Return
+        ------
+        obtype : str
+        """
         return self._data[1]
 
     def replace(self, sigma):
+        """
+        Given a substitution, returns either the same object if it is not
+        present as a key in the substitution, or the substituting object
+        if it is.
+        
+        Parameters
+        ----------
+        sigma : dict
+            A Object -> Object dictionary representing a substitution.
+            This object (self) may or may not be present in this substitution
+            as a key.
+        
+        Return
+        ------
+        obj : Object
+            Either self, if self is not present in sigma, or sigma[self]
+            
+        Examples
+        --------
+        >>> _x, _y, a = Object("?x"), Object("?y"), Object("a")
+        >>> _x.replace({_x: a})
+        Object(a: object)
+        >>> _x.replace({_y: a})
+        Object(X: object)
+        """
         return sigma.get(self, self)
 
     def is_variable(self):
@@ -125,24 +184,21 @@ class GroundedAction:
         return f"GroundedAction({self})"
 
 
-def _match_unify(refatom, atom, sigma):
+def _match_unify(refatom, atom, sigma=None):
     """
     Finds, if possible, a substitution from variables to constants,
     making a atom equal to a reference atom.
 
     Parameters
     ----------
-    refatom : tuple
-        A tuple of str that represents a compound atom (e.g. predicate
-        or function). Every str after the first (which is interpreted
-        as the head of the atom) must be a constant (i.e. is_lifted should
-        return False on them).
-    atom : tuple
-        A tuple of str that should be matched with the reference atom.
-        This atom may contain variables.
-    sigma : dict
-        A dictionary from variables to constants (both str). By default,
-        it's None, meaning that no partial or total substitution should
+    refatom : Atom
+        Reference atom (i.e. predicate variable). It must be grounded.
+    atom : Atom
+        An atom (possibly with lifted variables). Free variables must
+        not be present in sigma.
+    sigma : dict or None
+        An Object->Object dictionary, from variables to constants.
+        By default, it's None, meaning that no partial or total substitution should
         be considered by this function.
 
     Return
@@ -156,21 +212,28 @@ def _match_unify(refatom, atom, sigma):
 
     Examples
     --------
-    >>> match_unify(("on","a","b"), ("on", "X", "Y")) == {"X": "a", "Y": "b"}
+    >>> a = Object("a")
+    >>> b = Object("b")
+    >>> c = Object("c")
+    >>> _x = Object("?x")
+    >>> _y = Object("?y")
+    >>> _z = Object("?z")
+    >>> _match_unify(Atom("on", a, b), Atom("on", _x, _y)) == {_x: a, _y: b}
     True
-    >>> match_unify(("on","a","b"), ("on", "X", "X")) is None
+    >>> _match_unify(Atom("on", a, b), Atom("on", _x, _x)) is None
     True
-    >>> match_unify(("on","a","b"), ("on", "X", "Y"), {"Z": "c"}) == {"X": "a", "Y": "b", "Z": "c"}
+    >>> _match_unify(Atom("on", a, b), Atom("on", _x, _y), {_z: c}) == {_x: a, _y: b, _z: c}
     True
-    >>> match_unify(("dummy",), ("dummy",)) == {}
+    >>> _match_unify(Atom("dummy"), Atom("dummy")) == {}
     True
-    >>> match_unify(("dummy",), ("ducky",)) is None
+    >>> _match_unify(Atom("dummy"), Atom("ducky")) is None
     True
     """
     if refatom.head != atom.head or refatom.arity() != atom.arity():
         return None
-    sigma = sigma.copy()
+    sigma = sigma.copy() if sigma is not None else {}
     for ref_obj, obj in zip(refatom.args, atom.args):
+        obj = sigma.get(obj, obj)
         if obj.is_variable():
             sigma[obj] = ref_obj
         elif obj != ref_obj:
@@ -449,3 +512,7 @@ class Problem:
             ret = out.getvalue()
         return ret
 
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

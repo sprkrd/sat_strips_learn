@@ -1,3 +1,5 @@
+from strips import ActionSchema as StripsAction
+
 
 ACTION_SECTIONS = ["pre", "add", "del"]
 
@@ -82,6 +84,77 @@ class LabeledAtom:
         return f"LabeledAtom({self})"
 
 
+class State:
+    """
+    Represents a symbolic state, that is, a collection of atomic facts 
+    (instantiated predicates) that describe the world. Partially observability
+    is supported (or, alternatively, one could think about open world states),
+    so some atoms can be specified as "may be true".
+
+    Parameters
+    ----------
+    atoms : set
+        Collection of predicate variables (strips.Atom) that are known to hold
+        for sure.
+    uncertain_atoms : set
+        Also predicate variables (strips.Atom). These are not guaranteed to be
+        true. It is assumed that the atoms and uncertain_atoms are disjoint
+        sets, because a fact cannot be known and unknown at the same time.
+        The caller is responsible to enforce this.
+    """
+
+    def __init__(self, atoms, uncertain_atoms=None):
+        """
+        See help(type(self)).
+        """
+        self.atoms = atoms
+        self.uncertain_atoms = uncertain_atoms or set()
+
+    def difference(self, other, certain=True):
+        """
+        Computes the predicates that should be added to another given state to
+        become this one.
+
+        The difference can be computed in two modalities: (1) with full
+        certainty, i.e. atoms that must be added for sure; and (2) with
+        uncertainty, i.e. atoms that might have to be added.
+
+        Parameters
+        ----------
+        other : State
+            state that is compared to self
+        certain : Bool
+            if true, only the certain additions are returned, otherwise, only
+            the uncertain additions are returned.
+
+        Return
+        ------
+        out: set
+            the set of atoms that should be added to make other equal to self
+            (or that should be removed from other to become self).
+        """
+        if not certain:
+            return (self.atoms&other.uncertain_atoms) |\
+                   (self.uncertain_atoms-other.atoms)
+        return self.atoms - other.atoms - other.uncertain_atoms
+        
+    def is_uncertain(self):
+        return bool(self.uncertain_atoms)
+        
+    def copy(self):
+        return State(self.atoms.copy(), self.uncertain_atoms.copy())
+
+    def __eq__(self, other):
+        if not isinstance(other, State):
+            return NotImplemented
+        return self.atoms == other.atoms and self.uncertain_atoms == other.uncertain_atoms
+
+    def __str__(self):
+        fst_part = ",".join(map(atom_to_str, self.atoms))
+        snd_part = ",".join(map(atom_to_str, self.uncertain_atoms))
+        return f"{{ {fst_part}; maybe {snd_part} }}"
+
+
 class Action:
     """
     Represents an open world action.
@@ -115,7 +188,7 @@ class Action:
         List of parameters of this action
     """
 
-    def __init__(self, name, atoms, parent=None, parameters=None):
+    def __init__(self, name, atoms, parent=None, parameters=None, domain=None):
         """
         See help(type(self)).
         """
@@ -125,9 +198,33 @@ class Action:
         if parameters is None:
             parameters = set()
             for atom in atoms:
-                parameters.update(atom.atom.args)
+                parameters.update(arg for arg in atom.atom.args if arg.is_variable())
             parameters = list(parameters)
         self.parameters = parameters
+        self.domain 
+        self._verify()
+
+    def _verify(self):
+        for param in self.parameters:
+            if not param.is_variable():
+                raise ValueError(f"Parameter {param} is not a variable")
+        for atom in self.atoms:
+            for arg in atom.atom.args:
+                if arg.is_variable() and arg not in self.parameters:
+                    raise ValueError(f"Free variable {arg} is not present in the list of parameters")
+
+    def get_atoms_in_section(self, sections=None, include_uncertain=True):
+        section = section or ACTION_SECTIONS
+        return [atom for atom in self.atoms if atom.section in sections and (atom.certain or include_uncertain)]
+
+    def to_strips(self, keep_uncertain=True):
+        name = self.name
+        parameters = self.parameters
+        precondition = [atom.atom for atom in self.get_atoms_in_section(["pre"], keep_uncertain)]
+        add_list = [atom.atom for atom in self.get_atoms_in_section(["add"], keep_uncertain)]
+        del_list = [atom.atom for atom in self.get_atoms_in_section(["del"], keep_uncertain)]
+        return 
+
 
     def get_referenced_objects(self, sections=None):
         """
@@ -224,7 +321,7 @@ class Action:
         return True
 
     @staticmethod
-    def from_transition(s, s_next, lifted=False, name=None):
+    def from_transition(name, s, s_next, lifted=False):
         """
         Static constructor that takes two states that are interpreted as successive
         and builds an action that describes the transition.
@@ -257,24 +354,20 @@ class Action:
         del_certain = s.difference(s_next)
         add_uncertain = s_next.difference(s, False)
         del_uncertain = s.difference(s_next, False)
-        features = []
+        atoms = []
         for atom in s.atoms:
-            features.append(Feature(atom, feature_type="pre"))
+            atoms.append(LabeledAtom(atom, section="pre"))
         for atom in s.uncertain_atoms:
-            features.append(Feature(atom, feature_type="pre", certain=False))
+            atoms.append(LabeledAtom(atom, section="pre", certain=False))
         for atom in add_certain:
-            features.append(Feature(atom, feature_type="add"))
+            atoms.append(LabeledAtom(atom, section="add"))
         for atom in add_uncertain:
-            features.append(Feature(atom, feature_type="add", certain=False))
+            atoms.append(LabeledAtom(atom, section="add", certain=False))
         for atom in del_certain:
-            features.append(Feature(atom, feature_type="del"))
+            atoms.append(LabeledAtom(atom, section="del"))
         for atom in del_uncertain:
-            features.append(Feature(atom, feature_type="del", certain=False))
-        if lifted:
-            ref_dict = {}
-            for feat in features:
-                feat.lift_atom(ref_dict)
-        return Action(name, features)
+            atoms.append(LabeledAtom(atom, section="del", certain=False))
+        return Action(name, atoms)
 
     def __str__(self):
         name = self.name

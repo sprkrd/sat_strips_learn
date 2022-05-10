@@ -158,7 +158,7 @@ class Atom:
         return self._data[1:]
         
     def get_signature(self):
-        return f"{self.head}/{self.arity()}"
+        return (self.head,) + tuple(arg.objtype for arg in self.args)
 
     def arity(self):
         return len(self._data) - 1

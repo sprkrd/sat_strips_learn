@@ -201,7 +201,7 @@ class Action:
                 parameters.update(arg for arg in atom.atom.args if arg.is_variable())
             parameters = list(parameters)
         self.parameters = parameters
-        self.domain 
+        self.domain = domain
         self._verify()
 
     def _verify(self):
@@ -223,7 +223,7 @@ class Action:
         precondition = [atom.atom for atom in self.get_atoms_in_section(["pre"], keep_uncertain)]
         add_list = [atom.atom for atom in self.get_atoms_in_section(["add"], keep_uncertain)]
         del_list = [atom.atom for atom in self.get_atoms_in_section(["del"], keep_uncertain)]
-        return 
+        return StripsAction(name, parameters, precondition, add_list, del_list)
 
 
     def get_referenced_objects(self, sections=None):

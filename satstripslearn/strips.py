@@ -87,18 +87,13 @@ class Object:
         out : bool
         """
         return self.name[0] == "?"
-
-    def to_str(self, fmt="default", include_type=False):
+        
+    def to_pddl(self, include_type=False):
         """
-        String representation of the object.
+        PDDL string representation of the object.
 
         Parameters
         ----------
-        fmt : str
-            Format. Available formats are: (1) "default": a prolog-like format
-            in which variables start in uppercase, and constants in lowercase;
-            (2) "pddl": follows the PDDL convention in which variables start with a
-            question mark.
         include_type: bool
             Whether to include the type of the object in the sting representation or not.
             In the PDDL format, the type is included as a dash followed by the type name.
@@ -110,26 +105,15 @@ class Object:
 
         Examples
         --------
-        >>> _x = Object("?x")
         >>> blue = Object("blue", "color")
-        >>> print(_x.to_str(fmt="default", include_type=True))
-        X: object
-        >>> print(_x.to_str(fmt="pddl", include_type=True))
-        ?x - object
-        >>> print(blue.to_str(fmt="pddl", include_type=False))
+        >>> print(blue.to_str(include_type=True))
+        blue - color
+        >>> print(blue.to_str(include_type=False))
         blue
         """
         ret = self.name
-        if fmt == "default":
-            if self.is_variable():
-                ret = ret[1:].title()
-            if include_type:
-                ret += ": " + self.objtype
-        elif fmt == "pddl":
-            if include_type:
-                ret += " - " + self.objtype
-        else:
-            raise ValueError(f"Unknown format: {fmt}")
+        if include_type:
+            ret += " - " + self.objtype
         return ret
 
     def __eq__(self, other):
@@ -139,10 +123,30 @@ class Object:
         return hash(self._data)
 
     def __str__(self):
-        return self.to_str(fmt="default", include_type=True)
+        return self.to_pddl(include_type=True)
 
     def __repr__(self):
         return f"Object({self})"
+        
+        
+def _typed_objlist_to_pddl(objlist, break_lines=False):
+    lines = []
+    current_line = []
+    last_type = None
+    for obj in objlist:
+        if last_type is not None and last_type != obj.objtype:
+            current_line.append("-")
+            current_line.append(last_type)
+            lines.append(" ".join(current_line))
+            current_line = []
+        current_line.append(obj.name)
+        last_type = obj.objtype
+    if current_line:
+        current_line.append("-")
+        current_line.append(last_type)
+        lines.append(" ".join(current_line)
+    sep = "\n" if break_lines else " "
+    return sep.join(lines)
         
 
 class Atom:
@@ -169,16 +173,10 @@ class Atom:
         
     def is_lifted(self):
         return any(arg.is_variable() for arg in self.args)
-
-    def to_str(self, fmt="default", include_types=False):
-        args_str = [arg.to_str(fmt, include_types) for arg in self.args]
-        if fmt == "default":
-            ret = self.head + "(" + ", ".join(args_str) + ")"
-        elif fmt == "pddl":
-            ret = "(" + " ".join([self.head] + args_str) + ")"
-        else:
-            raise ValueError(f"Unknown format: {fmt}")
-        return ret
+        
+    def to_pddl(self, include_types=False):
+        args_str = [arg.to_pddl(include_types) for arg in self.args]
+        return "(" + " ".join([self.head] + args_str) + ")"
 
     def __eq__(self, other):
         return self._data == other._data
@@ -187,7 +185,7 @@ class Atom:
         return hash(self._data)
 
     def __str__(self):
-        return self.to_str(fmt="default", include_types=True)
+        return self.to_str(include_types=True)
 
     def __repr__(self):
         return f"Atom({self})"
@@ -281,14 +279,18 @@ def _match_unify(refatom, atom, sigma=None):
 
 class ActionSchema:
     
-    def __init__(self, name, parameters=None, precondition=None, add_list=None, del_list=None, domain=None):
+    def __init__(self, name, parameters=None, precondition=None, add_list=None, del_list=None, domain=None, verify=False):
         self.name = name
         self.parameters = parameters or []
         self.precondition = precondition or []
         self.add_list = add_list or []
         self.del_list = del_list or []
         self.domain = domain
-        self._verify()
+        if domain and verify:
+            self._verify()
+        
+    def get_signature(self):
+        return (self.name,) + tuple(param.objtype for param in self.parameters)
         
     def arity(self):
         return len(self.parameters)
@@ -298,6 +300,8 @@ class ActionSchema:
             if not param.is_variable():
                 raise ValueError(f"Parameter {param} is not a variable")
         for atom in chain(self.precondition, self.add_list, self.del_list):
+            atom_signature = atom.get_signature()
+            if not any(atom_signature == pred.get_signature() for pred in self.)
             for arg in atom.args:
                 if arg.is_variable() and arg not in self.parameters:
                     raise ValueError(f"Free variable {arg} is not present in the list of parameters")
@@ -338,6 +342,8 @@ class ActionSchema:
                             stack.append((param_idx+1,sigma_new))
                     
     def all_groundings(self, objects, state):
+        if self._domain is None:
+            raise ValueError("A domain must be specified first")
         for sigma in self._all_groundings_aux1(state):
             yield from self._all_groundings_aux2(objects, sigma)
         
@@ -351,36 +357,28 @@ class ActionSchema:
             raise ValueError("Type mismatch")
         return GroundedAction(self, parameters)
         
-    def to_str(self, fmt="default", typing=True):
+    def to_pddl(self, typing=True):
         lines = []
-        if fmt == "default":
-            lines.append(self.name + " {")
-            lines.append("    parameters: " + ", ".join(param.to_str(fmt="default", include_type=typing) for param in self.parameters) + ";")
-            for group in ("precondition", "add_list", "del_list"):
-                atoms = ", ".join(atom.to_str(fmt="default",include_types=False) for atom in getattr(self, group))
-                lines.append(f"    {group}: {atoms};")
-            lines.append("}")
-        elif fmt == "pddl":
-            lines.append("(:action " + self.name)
-            if self.parameters:
-                params = " ".join(param.to_str(fmt="pddl",include_type=typing) for param in self.parameters)
-                lines.append(f" :parameters ({params})")
-            if self.precondition:
-                precondition = " ".join(["and"] + [atom.to_str(fmt="pddl",include_types=False) for atom in self.precondition])
-                lines.append(f" :precondition ({precondition})")
-            if self.add_list or self.del_list:
-                effect = ["and"]
-                for atom in self.add_list:
-                    effect.append(atom.to_str(fmt="pddl", include_types=False))
-                for atom in self.del_list:
-                    effect.append(f"(not {atom.to_str(fmt='pddl', include_types=False)})")
-                effect = " ".join(effect)
-                lines.append(f" :effect ({effect})")
-            lines.append(")")
+        lines.append("(:action " + self.name)
+        if self.parameters:
+            params = " ".join(param.to_str(include_type=typing) for param in self.parameters)
+            lines.append(f" :parameters ({params})")
+        if self.precondition:
+            precondition = " ".join(["and"] + [atom.to_str(include_types=False) for atom in self.precondition])
+            lines.append(f" :precondition ({precondition})")
+        if self.add_list or self.del_list:
+            effect = ["and"]
+            for atom in self.add_list:
+                effect.append(atom.to_str(include_types=False))
+            for atom in self.del_list:
+                effect.append(f"(not {atom.to_str(include_types=False)})")
+            effect = " ".join(effect)
+            lines.append(f" :effect ({effect})")
+        lines.append(")")
         return "\n".join(lines)
         
     def __str__(self):
-        return self.to_str(fmt="default", typing=True)
+        return self.to_str(typing=True)
 
 
 class _ObjectFactory:
@@ -530,17 +528,17 @@ class Problem:
         out.write(f"(define (problem {self.name}) (:domain {self.domain.name})\n")
         out.write("(:objects\n")
         for obj in self.objects:
-            out.write(obj.to_str(fmt="pddl", include_type=True))
+            out.write(obj.to_str(include_type=True))
             out.write("\n")
         out.write(")\n")
         out.write("(:init\n")
         for atom in self.init:
-            out.write(atom.to_str(fmt="pddl", include_type=False))
+            out.write(atom.to_str(include_type=False))
             out.write("\n")
         out.write(")\n")
         out.write("(:goal (and\n")
         for atom in goal:
-            out.write(atom.to_str(fmt="pddl", include_type=False))
+            out.write(atom.to_str(include_type=False))
             out.write("\n")
         out.write("))\n)\n")
         

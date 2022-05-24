@@ -106,9 +106,9 @@ class Object:
         Examples
         --------
         >>> blue = Object("blue", "color")
-        >>> print(blue.to_str(include_type=True))
+        >>> print(blue.to_pddl(include_type=True))
         blue - color
-        >>> print(blue.to_str(include_type=False))
+        >>> print(blue.to_pddl(include_type=False))
         blue
         """
         ret = self.name
@@ -144,7 +144,7 @@ def _typed_objlist_to_pddl(objlist, break_lines=False):
     if current_line:
         current_line.append("-")
         current_line.append(last_type)
-        lines.append(" ".join(current_line)
+        lines.append(" ".join(current_line))
     sep = "\n" if break_lines else " "
     return sep.join(lines)
         
@@ -185,7 +185,7 @@ class Atom:
         return hash(self._data)
 
     def __str__(self):
-        return self.to_str(include_types=True)
+        return self.to_pddl(include_types=True)
 
     def __repr__(self):
         return f"Atom({self})"
@@ -301,7 +301,8 @@ class ActionSchema:
                 raise ValueError(f"Parameter {param} is not a variable")
         for atom in chain(self.precondition, self.add_list, self.del_list):
             atom_signature = atom.get_signature()
-            if not any(atom_signature == pred.get_signature() for pred in self.)
+            if not any(atom_signature == pred.get_signature() for pred in self.domain.predicates):
+                raise ValueError(f"Non-existent predicate signature: {atom_signature}")
             for arg in atom.args:
                 if arg.is_variable() and arg not in self.parameters:
                     raise ValueError(f"Free variable {arg} is not present in the list of parameters")
@@ -342,7 +343,7 @@ class ActionSchema:
                             stack.append((param_idx+1,sigma_new))
                     
     def all_groundings(self, objects, state):
-        if self._domain is None:
+        if self.domain is None:
             raise ValueError("A domain must be specified first")
         for sigma in self._all_groundings_aux1(state):
             yield from self._all_groundings_aux2(objects, sigma)
@@ -361,24 +362,24 @@ class ActionSchema:
         lines = []
         lines.append("(:action " + self.name)
         if self.parameters:
-            params = " ".join(param.to_str(include_type=typing) for param in self.parameters)
+            params = " ".join(param.to_pddl(include_type=typing) for param in self.parameters)
             lines.append(f" :parameters ({params})")
         if self.precondition:
-            precondition = " ".join(["and"] + [atom.to_str(include_types=False) for atom in self.precondition])
+            precondition = " ".join(["and"] + [atom.to_pddl(include_types=False) for atom in self.precondition])
             lines.append(f" :precondition ({precondition})")
         if self.add_list or self.del_list:
             effect = ["and"]
             for atom in self.add_list:
-                effect.append(atom.to_str(include_types=False))
+                effect.append(atom.to_pddl(include_types=False))
             for atom in self.del_list:
-                effect.append(f"(not {atom.to_str(include_types=False)})")
+                effect.append(f"(not {atom.to_pddl(include_types=False)})")
             effect = " ".join(effect)
             lines.append(f" :effect ({effect})")
         lines.append(")")
         return "\n".join(lines)
         
     def __str__(self):
-        return self.to_str(typing=True)
+        return self.to_pddl(typing=True)
 
 
 class _ObjectFactory:
@@ -459,9 +460,8 @@ class Domain:
         while typename1 is not None and typename1 != typename2:
             typename1 = self.types.get(typename1)
         return typename1 is not None and typename1 == typename2
-        
-    
-    def dump_pddl(self, out):
+         
+    def dump(self, out):
         typing = self.types is not None
         
         out.write(f"(define (domain {self.name})\n\n")
@@ -481,23 +481,26 @@ class Domain:
             
         out.write("(:predicates\n")
         for predicate in self.predicates:
-            out.write(predicate.to_str("pddl", typing) + "\n")
+            out.write(predicate.to_pddl(typing) + "\n")
         out.write(")\n\n")
         
         for action in self.actions:
-            out.write(action.to_str("pddl", typing) + "\n\n")
+            out.write(action.to_pddl(typing) + "\n\n")
             
         out.write(")\n")
-        
-    def __str__(self):
+
+    def to_pddl(self):
         with StringIO() as out:
-            self.dump_pddl(out)
+            self.dump(out)
             ret = out.getvalue()
         return ret
         
+    def __str__(self):
+        return self.to_pddl()
+        
         
 class Problem:
-    def __init__(self, name, domain, objects=None, init=None, goal=None):
+    def __init__(self, name, domain=None, objects=None, init=None, goal=None):
         self.name = name
         self.domain = domain
         self.objects = objects or set()
@@ -523,24 +526,33 @@ class Problem:
         self._check_atom(atom)
         self.goal.append(atom)
         
-    def dump_pddl(self, out):
+    def dump(self, out):
         typing = self.domain.types is not None
         out.write(f"(define (problem {self.name}) (:domain {self.domain.name})\n")
         out.write("(:objects\n")
-        for obj in self.objects:
-            out.write(obj.to_str(include_type=True))
-            out.write("\n")
-        out.write(")\n")
+        if typing:
+            objects = sorted(self.objects, key=lambda o: (o.objtype, o.name))
+            out.write(_typed_objlist_to_pddl(objects, break_lines=True))
+        else:
+            out.write(" ".join(o.name for o in self.objects))
+        out.write("\n)\n")
         out.write("(:init\n")
         for atom in self.init:
-            out.write(atom.to_str(include_type=False))
+            out.write(atom.to_pddl(include_type=False))
             out.write("\n")
         out.write(")\n")
         out.write("(:goal (and\n")
         for atom in goal:
-            out.write(atom.to_str(include_type=False))
+            out.write(atom.to_pddl(include_type=False))
             out.write("\n")
         out.write("))\n)\n")
+
+    def to_pddl(self):
+        with StringIO() as out:
+            self.dump(out)
+            ret = out.getvalue()
+        return ret
+
         
     def __str__(self):
         with StringIO() as out:

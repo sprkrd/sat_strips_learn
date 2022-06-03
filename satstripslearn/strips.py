@@ -175,8 +175,12 @@ class Atom:
         return any(arg.is_variable() for arg in self.args)
         
     def to_pddl(self, include_types=False):
-        args_str = [arg.to_pddl(include_types) for arg in self.args]
-        return "(" + " ".join([self.head] + args_str) + ")"
+        args = self.args
+        if args:
+            args_str = _typed_objlist_to_pddl(args) if include_types\
+                    else " ".join(obj.name for obj in args)
+            return "(" + self.head + " " + args_str + ")"
+        return "(" + self.head + ")"
 
     def __eq__(self, other):
         return self._data == other._data
@@ -362,7 +366,7 @@ class ActionSchema:
         lines = []
         lines.append("(:action " + self.name)
         if self.parameters:
-            params = " ".join(param.to_pddl(include_type=typing) for param in self.parameters)
+            params = _typed_objlist_to_pddl(self.parameters) if typing else " ".join(param.name for param in self.parameters)
             lines.append(f" :parameters ({params})")
         if self.precondition:
             precondition = " ".join(["and"] + [atom.to_pddl(include_types=False) for atom in self.precondition])
@@ -466,10 +470,10 @@ class Domain:
         
         out.write(f"(define (domain {self.name})\n\n")
         
-        if self.types is not None:
-            out.write("(:requirements :strips)\n\n")
-        else:
+        if typing:
             out.write("(:requirements :strips :typing)\n\n")
+        else:
+            out.write("(:requirements :strips)\n\n")
             
         if typing:
             sorted_types = _toposort(self.types)

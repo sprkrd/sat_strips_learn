@@ -30,7 +30,7 @@ state = {At(robot, Location("a1")), Adjacent(Location("a1"), Location("a2")), Ad
          
 objects = [robot, Location("a1"), Location("a2"), Location("b1"), Location("b2")]
 
-groundings = list(Move.all_groundings(objects, state))
+groundings = list(Move.all_groundings(dom, objects, state))
 
 print(groundings[0].apply(state))
 

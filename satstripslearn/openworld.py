@@ -69,16 +69,13 @@ class LabeledAtom:
 
         """
         return LabeledAtom(self.atom.replace(sigma), self.certain, self.section)
-        
-    def to_str(self, fmt="default", typing=True):
-        ret = self.atom.to_str(fmt, typing)
+
+    def __str__(self):
+        ret = self.atom.to_pddl(True)
         if not self.certain:
             ret = "?" + ret
         ret = self.section + ":" + ret
         return ret
-
-    def __str__(self):
-        return self.to_str()
 
     def __repr__(self):
         return f"LabeledAtom({self})"
@@ -202,16 +199,6 @@ class Action:
             parameters = list(parameters)
         self.parameters = parameters
         self.domain = domain
-        self._verify()
-
-    def _verify(self):
-        for param in self.parameters:
-            if not param.is_variable():
-                raise ValueError(f"Parameter {param} is not a variable")
-        for atom in self.atoms:
-            for arg in atom.atom.args:
-                if arg.is_variable() and arg not in self.parameters:
-                    raise ValueError(f"Free variable {arg} is not present in the list of parameters")
 
     def get_atoms_in_section(self, sections=None, include_uncertain=True):
         section = section or ACTION_SECTIONS

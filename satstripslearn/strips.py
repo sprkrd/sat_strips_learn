@@ -150,6 +150,17 @@ def _typed_objlist_to_pddl(objlist, break_lines=False):
         
 
 class Atom:
+    """
+    A predicate variable consisting of a head and a list of arguments.
+
+    Parameters
+    ----------
+    head : str
+        Predicate name
+    *args : [str...]
+        List of arguments of this atom
+    """
+
     def __init__(self, head, *args):
         self._data = (head, *args)
 
@@ -283,33 +294,18 @@ def _match_unify(refatom, atom, sigma=None):
 
 class ActionSchema:
     
-    def __init__(self, name, parameters=None, precondition=None, add_list=None, del_list=None, domain=None, verify=False):
+    def __init__(self, name, parameters=None, precondition=None, add_list=None, del_list=None):
         self.name = name
         self.parameters = parameters or []
         self.precondition = precondition or []
         self.add_list = add_list or []
         self.del_list = del_list or []
-        self.domain = domain
-        if domain and verify:
-            self._verify()
         
     def get_signature(self):
         return (self.name,) + tuple(param.objtype for param in self.parameters)
         
     def arity(self):
         return len(self.parameters)
-        
-    def _verify(self):
-        for param in self.parameters:
-            if not param.is_variable():
-                raise ValueError(f"Parameter {param} is not a variable")
-        for atom in chain(self.precondition, self.add_list, self.del_list):
-            atom_signature = atom.get_signature()
-            if not any(atom_signature == pred.get_signature() for pred in self.domain.predicates):
-                raise ValueError(f"Non-existent predicate signature: {atom_signature}")
-            for arg in atom.args:
-                if arg.is_variable() and arg not in self.parameters:
-                    raise ValueError(f"Free variable {arg} is not present in the list of parameters")
                     
     def _all_groundings_aux1(self, state):
         pre = self.precondition
@@ -328,37 +324,33 @@ class ActionSchema:
             elif atom in state:
                 stack.append((idx+1, sigma))
                 
-    def _all_groundings_aux2(self, objects, sigma0):
-        dom = self.domain
+    def _all_groundings_aux2(self, domain, objects, sigma0):
         stack = [(0,sigma0)]
         while stack:
             param_idx, sigma = stack.pop()
             if param_idx == self.arity():
-                yield self.ground(*(sigma[param] for param in self.parameters))
+                yield self.ground(domain, *(sigma[param] for param in self.parameters))
             else:
                 param = self.parameters[param_idx]
                 if param in sigma:
                     stack.append((param_idx+1,sigma))
                 else:
                     for obj in objects:
-                        if dom.is_subtype(obj.objtype, param.objtype):
+                        if domain.is_subtype(obj.objtype, param.objtype):
                             sigma_new = sigma.copy()
                             sigma_new[param] = obj
                             stack.append((param_idx+1,sigma_new))
                     
-    def all_groundings(self, objects, state):
-        if self.domain is None:
-            raise ValueError("A domain must be specified first")
+    def all_groundings(self, domain, objects, state):
         for sigma in self._all_groundings_aux1(state):
-            yield from self._all_groundings_aux2(objects, sigma)
+            yield from self._all_groundings_aux2(domain, objects, sigma)
         
-    def ground(self, *parameters):
-        dom = self.domain
+    def ground(self, domain, *parameters):
         if len(parameters) != self.arity():
             raise ValueError("Invalid number of parameters")
         if any(param.is_variable() for param in parameters):
             raise ValueError("Parameters cannot be free variables")
-        if not all(dom.is_subtype(p1.objtype,p2.objtype) for p1,p2 in zip(parameters,self.parameters)):
+        if not all(domain.is_subtype(p1.objtype,p2.objtype) for p1,p2 in zip(parameters,self.parameters)):
             raise ValueError("Type mismatch")
         return GroundedAction(self, parameters)
         
@@ -452,9 +444,22 @@ class Domain:
         return _AtomFactory(atom, self)
         
     def declare_action(self, name, params, pre, add_list, del_list):
-        action = ActionSchema(name, params, pre, add_list, del_list, self)
+        action = ActionSchema(name, params, pre, add_list, del_list)
+        self._verify_action(action)
         self.actions.append(action)
         return action
+
+    def _verify_action(self, action):
+        for param in action.parameters:
+            if not param.is_variable():
+                raise ValueError(f"Parameter {param} is not a variable")
+        for atom in chain(action.precondition, action.add_list, action.del_list):
+            atom_signature = atom.get_signature()
+            if not any(atom_signature == pred.get_signature() for pred in self.predicates):
+                raise ValueError(f"Non-existent predicate signature: {atom_signature}")
+            for arg in atom.args:
+                if arg.is_variable() and arg not in action.parameters:
+                    raise ValueError(f"Free variable {arg} is not present in the list of parameters")
         
     def is_subtype(self, typename1, typename2):
         types = self.types

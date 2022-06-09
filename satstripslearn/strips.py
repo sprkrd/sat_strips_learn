@@ -2,6 +2,36 @@ from io import StringIO
 from itertools import chain 
 
 
+class ObjType:
+
+    def __init__(self, name, parent=None):
+        self.name = name
+        self.parent = parent
+
+    def is_subtype(self, other):
+        current = self
+        while current is not None and current is not other:
+            current = current.parent
+        return current is other
+
+    def is_supertype(self, other):
+        return other.is_subtype(self)
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return f"ObjType({self.name})"
+
+    def __call__(self, *args):
+        if len(args) == 1:
+            return Object(args[0], self)
+        return tuple(Object(arg,self) for arg in args)
+
+
+ROOT_TYPE = ObjType("object")
+
+
 class Object:
     """
     Represents a STRIPS object.
@@ -22,7 +52,7 @@ class Object:
         Same as the value passed as parameter.
     """
     
-    def __init__(self, name, objtype="object"):
+    def __init__(self, name, objtype=None):
         """
         See help(type(self)).
         """
@@ -49,6 +79,9 @@ class Object:
         obtype : str
         """
         return self._data[1]
+
+    def is_compatible(self, other):
+        return self.objtype.is_subtype(other.objtype)
 
     def replace(self, sigma):
         """
@@ -112,7 +145,7 @@ class Object:
         blue
         """
         ret = self.name
-        if include_type:
+        if include_type and self.objtype is not None:
             ret += " - " + self.objtype
         return ret
 
@@ -134,20 +167,30 @@ def _typed_objlist_to_pddl(objlist, break_lines=False):
     current_line = []
     last_type = None
     for obj in objlist:
-        if last_type is not None and last_type != obj.objtype:
+        if last_type is not None and last_type is not obj.objtype:
             current_line.append("-")
-            current_line.append(last_type)
+            current_line.append(last_type.name)
             lines.append(" ".join(current_line))
             current_line = []
         current_line.append(obj.name)
         last_type = obj.objtype
     if current_line:
         current_line.append("-")
-        current_line.append(last_type)
+        current_line.append(last_type.name)
         lines.append(" ".join(current_line))
     sep = "\n" if break_lines else " "
     return sep.join(lines)
+
+
+def _untyped_objlist_to_pddl(objlist):
+    return " ".join(obj.name for obj in objlist)
         
+
+# class Predicate:
+
+    # def __init__(self, head, *args):
+        # if len(args) == 1 and isinstance(args[0],int):
+            
 
 class Atom:
     """

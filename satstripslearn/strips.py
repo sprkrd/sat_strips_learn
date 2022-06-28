@@ -52,7 +52,7 @@ class Object:
         Same as the value passed as parameter.
     """
     
-    def __init__(self, name, objtype=None):
+    def __init__(self, name, objtype=ROOT_TYPE):
         """
         See help(type(self)).
         """
@@ -121,7 +121,7 @@ class Object:
         """
         return self.name[0] == "?"
         
-    def to_pddl(self, include_type=False):
+    def to_pddl(self, include_type=True):
         """
         PDDL string representation of the object.
 
@@ -184,12 +184,6 @@ def _typed_objlist_to_pddl(objlist, break_lines=False):
 
 def _untyped_objlist_to_pddl(objlist):
     return " ".join(obj.name for obj in objlist)
-        
-
-# class Predicate:
-
-    # def __init__(self, head, *args):
-        # if len(args) == 1 and isinstance(args[0],int):
             
 
 class Atom:
@@ -228,7 +222,7 @@ class Atom:
     def is_lifted(self):
         return any(arg.is_variable() for arg in self.args)
         
-    def to_pddl(self, include_types=False):
+    def to_pddl(self, include_types=True):
         args = self.args
         if args:
             args_str = _typed_objlist_to_pddl(args) if include_types\
@@ -247,6 +241,41 @@ class Atom:
 
     def __repr__(self):
         return f"Atom({self})"
+
+
+class Predicate:
+    def __init__(self, head, *args):
+        if 1 <= len(args) <= 2 and isinstance(args[0],int):
+            t = args[1] if len(args) == 2 else ROOT_TYPE
+            arity = args[0]
+            args = (t,)*arity
+        self._head = head
+        self._argtypes = args
+
+    @property
+    def head(self):
+        return self._head
+
+    @property
+    def argtypes(self):
+        return self._argtypes
+
+    def arity(self):
+        return len(self.argtypes)
+
+    def __call__(self, *args):
+        if len(args) != len(self._argtypes):
+            raise ValueError("Invalid number of arguments")
+        if not all(o.objtype.is_subtype(t) for o,t in zip(args,self._argtypes)):
+            raise ValueError("Cannot instantiate atom: invalid signature")
+        return Atom(self._head, *args)
+
+    def to_pddl(self, include_types=True):
+        dummy_objects = [Object(f"?x{i}", t) for i,t in enumerate(self._argtypes)]
+        atom = Atom(self._head, *dummy_objects)
+        return atom.to_pddl(include_types=True)
+
+    def __str__(self
         
 
 class GroundedAction:

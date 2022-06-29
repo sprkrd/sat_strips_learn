@@ -16,12 +16,15 @@ class ObjType:
 
     def is_supertype(self, other):
         return other.is_subtype(self)
-
+        
+    def to_pddl(self):
+        return self.name + " - " + self.parent.name if self.parent else self.name
+        
     def __str__(self):
-        return self.name
+        return self.to_pddl()
 
     def __repr__(self):
-        return f"ObjType({self.name})"
+        return f"ObjType({self})"
 
     def __call__(self, *args):
         if len(args) == 1:
@@ -146,7 +149,7 @@ class Object:
         """
         ret = self.name
         if include_type and self.objtype is not None:
-            ret += " - " + self.objtype
+            ret += " - " + self.objtype.name
         return ret
 
     def __eq__(self, other):
@@ -156,7 +159,7 @@ class Object:
         return hash(self._data)
 
     def __str__(self):
-        return self.to_pddl(include_type=True)
+        return self.to_pddl()
 
     def __repr__(self):
         return f"Object({self})"
@@ -185,63 +188,6 @@ def _typed_objlist_to_pddl(objlist, break_lines=False):
 def _untyped_objlist_to_pddl(objlist):
     return " ".join(obj.name for obj in objlist)
             
-
-class Atom:
-    """
-    A predicate variable consisting of a head and a list of arguments.
-
-    Parameters
-    ----------
-    head : str
-        Predicate name
-    *args : [str...]
-        List of arguments of this atom
-    """
-
-    def __init__(self, head, *args):
-        self._data = (head, *args)
-
-    @property
-    def head(self):
-        return self._data[0]
-
-    @property
-    def args(self):
-        return self._data[1:]
-        
-    def get_signature(self):
-        return (self.head,) + tuple(arg.objtype for arg in self.args)
-
-    def arity(self):
-        return len(self._data) - 1
-
-    def replace(self, sigma):
-        replaced_args = (arg.replace(sigma) for arg in self.args)
-        return Atom(self.head, *replaced_args)
-        
-    def is_lifted(self):
-        return any(arg.is_variable() for arg in self.args)
-        
-    def to_pddl(self, include_types=True):
-        args = self.args
-        if args:
-            args_str = _typed_objlist_to_pddl(args) if include_types\
-                    else " ".join(obj.name for obj in args)
-            return "(" + self.head + " " + args_str + ")"
-        return "(" + self.head + ")"
-
-    def __eq__(self, other):
-        return self._data == other._data
-
-    def __hash__(self):
-        return hash(self._data)
-
-    def __str__(self):
-        return self.to_pddl(include_types=True)
-
-    def __repr__(self):
-        return f"Atom({self})"
-
 
 class Predicate:
     def __init__(self, head, *args):
@@ -275,7 +221,72 @@ class Predicate:
         atom = Atom(self._head, *dummy_objects)
         return atom.to_pddl(include_types=True)
 
-    def __str__(self
+    def __str__(self):
+        return self.to_pddl()
+        
+    def __repr__(self):
+        return f"Predicate({self})"
+
+
+class Atom:
+    """
+    A predicate variable consisting of a head and a list of arguments.
+
+    Parameters
+    ----------
+    head : str
+        Predicate name
+    *args : [str...]
+        List of arguments of this atom
+    """
+
+    def __init__(self, head, *args):
+        self._data = (head, *args)
+
+    @property
+    def head(self):
+        return self._data[0]
+
+    @property
+    def args(self):
+        return self._data[1:]
+        
+    def get_signature(self):
+        return (self.head,) + tuple(arg.objtype for arg in self.args)
+        
+    def is_compatible(self, other):
+        return self.head == other.head and self.arity() == other.arity() and\
+                all(o1.is_compatible(o2) for o1,o2 in zip(self.args, other.args))
+
+    def arity(self):
+        return len(self._data) - 1
+
+    def replace(self, sigma):
+        replaced_args = (arg.replace(sigma) for arg in self.args)
+        return Atom(self.head, *replaced_args)
+        
+    def is_lifted(self):
+        return any(arg.is_variable() for arg in self.args)
+        
+    def to_pddl(self, include_types=True):
+        args = self.args
+        if args:
+            args_str = _typed_objlist_to_pddl(args) if include_types\
+                    else _untyped_objlist_to_pddl(args)
+            return "(" + self.head + " " + args_str + ")"
+        return "(" + self.head + ")"
+
+    def __eq__(self, other):
+        return self._data == other._data
+
+    def __hash__(self):
+        return hash(self._data)
+
+    def __str__(self):
+        return self.to_pddl(include_types=True)
+
+    def __repr__(self):
+        return f"Atom({self})"
         
 
 class GroundedAction:

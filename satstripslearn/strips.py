@@ -108,9 +108,9 @@ class Object:
         --------
         >>> _x, _y, a = Object("?x"), Object("?y"), Object("a")
         >>> _x.replace({_x: a})
-        Object(a: object)
+        Object(a - object)
         >>> _x.replace({_y: a})
-        Object(X: object)
+        Object(?x - object)
         """
         return sigma.get(self, self)
 
@@ -187,7 +187,27 @@ def _typed_objlist_to_pddl(objlist, break_lines=False):
 
 def _untyped_objlist_to_pddl(objlist):
     return " ".join(obj.name for obj in objlist)
-            
+
+
+def _typelist_to_pddl(typelist, break_lines=False):
+    lines = []
+    current_line = []
+    last_parent = None
+    for type_ in typelist:
+        if last_parent is not None and last_parent is not type_.parent:
+            current_line.append("-")
+            current_line.append(last_parent.name)
+            lines.append(" ".join(current_line))
+            current_line = []
+        current_line.append(type_.name)
+        last_parent = type_.parent
+    if current_line:
+        current_line.append("-")
+        current_line.append(last_parent.name)
+        lines.append(" ".join(current_line))
+    sep = "\n" if break_lines else " "
+    return sep.join(lines)
+ 
 
 class Predicate:
     def __init__(self, head, *args):
@@ -217,7 +237,7 @@ class Predicate:
         return Atom(self._head, *args)
 
     def to_pddl(self, include_types=True):
-        dummy_objects = [Object(f"?x{i}", t) for i,t in enumerate(self._argtypes)]
+        dummy_objects = [t(f"?x{i}") for i,t in enumerate(self._argtypes)]
         atom = Atom(self._head, *dummy_objects)
         return atom.to_pddl(include_types=True)
 
@@ -287,35 +307,6 @@ class Atom:
 
     def __repr__(self):
         return f"Atom({self})"
-        
-
-class GroundedAction:
-    
-    def __init__(self, schema, parameters):
-        self.schema = schema
-        self.parameters = parameters
-        self._sigma = dict(zip(schema.parameters, parameters))
-        
-    def is_applicable(self, state):
-        sigma = self._sigma
-        precondition = self.schema.precondition
-        return all(atom.replace(sigma) in state for atom in precondition)
-        
-    def apply(self, state):
-        next_state = None
-        if self.is_applicable(state):
-            next_state = state.copy()
-            for atom in self.schema.add_list:
-                next_state.add(atom.replace(self._sigma))
-            for atom in self.schema.del_list:
-                next_state.discard(atom.replace(self._sigma))
-        return next_state
-    
-    def __str__(self):
-        return self.schema.name + "(" + ",".join(obj.name for obj in self.parameters) + ")"
-        
-    def __repr__(self):
-        return f"GroundedAction({self})"
 
 
 def _match_unify(refatom, atom, sigma=None):
@@ -407,33 +398,33 @@ class ActionSchema:
             elif atom in state:
                 stack.append((idx+1, sigma))
                 
-    def _all_groundings_aux2(self, domain, objects, sigma0):
+    def _all_groundings_aux2(self, objects, sigma0):
         stack = [(0,sigma0)]
         while stack:
             param_idx, sigma = stack.pop()
             if param_idx == self.arity():
-                yield self.ground(domain, *(sigma[param] for param in self.parameters))
+                yield self.ground(*(sigma[param] for param in self.parameters))
             else:
                 param = self.parameters[param_idx]
                 if param in sigma:
                     stack.append((param_idx+1,sigma))
                 else:
                     for obj in objects:
-                        if domain.is_subtype(obj.objtype, param.objtype):
+                        if obj.is_compatible(param):
                             sigma_new = sigma.copy()
                             sigma_new[param] = obj
                             stack.append((param_idx+1,sigma_new))
                     
-    def all_groundings(self, domain, objects, state):
+    def all_groundings(self, objects, state):
         for sigma in self._all_groundings_aux1(state):
-            yield from self._all_groundings_aux2(domain, objects, sigma)
+            yield from self._all_groundings_aux2(objects, sigma)
         
-    def ground(self, domain, *parameters):
+    def ground(self, *parameters):
         if len(parameters) != self.arity():
             raise ValueError("Invalid number of parameters")
         if any(param.is_variable() for param in parameters):
             raise ValueError("Parameters cannot be free variables")
-        if not all(domain.is_subtype(p1.objtype,p2.objtype) for p1,p2 in zip(parameters,self.parameters)):
+        if not all(p1.is_compatible(p2) for p1,p2 in zip(parameters,self.parameters)):
             raise ValueError("Type mismatch")
         return GroundedAction(self, parameters)
         
@@ -459,6 +450,35 @@ class ActionSchema:
         
     def __str__(self):
         return self.to_pddl(typing=True)
+
+
+class GroundedAction:
+    
+    def __init__(self, schema, parameters):
+        self.schema = schema
+        self.parameters = parameters
+        self._sigma = dict(zip(schema.parameters, parameters))
+        
+    def is_applicable(self, state):
+        sigma = self._sigma
+        precondition = self.schema.precondition
+        return all(atom.replace(sigma) in state for atom in precondition)
+        
+    def apply(self, state):
+        next_state = None
+        if self.is_applicable(state):
+            next_state = state.copy()
+            for atom in self.schema.add_list:
+                next_state.add(atom.replace(self._sigma))
+            for atom in self.schema.del_list:
+                next_state.discard(atom.replace(self._sigma))
+        return next_state
+    
+    def __str__(self):
+        return self.schema.name + "(" + ",".join(obj.name for obj in self.parameters) + ")"
+        
+    def __repr__(self):
+        return f"GroundedAction({self})"
 
 
 class _ObjectFactory:

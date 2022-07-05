@@ -215,16 +215,8 @@ class Predicate:
             t = args[1] if len(args) == 2 else ROOT_TYPE
             arity = args[0]
             args = (t,)*arity
-        self._head = head
-        self._argtypes = args
-
-    @property
-    def head(self):
-        return self._head
-
-    @property
-    def argtypes(self):
-        return self._argtypes
+        self.head = head
+        self.argtypes = args
 
     def arity(self):
         return len(self.argtypes)
@@ -420,12 +412,6 @@ class ActionSchema:
             yield from self._all_groundings_aux2(objects, sigma)
         
     def ground(self, *parameters):
-        if len(parameters) != self.arity():
-            raise ValueError("Invalid number of parameters")
-        if any(param.is_variable() for param in parameters):
-            raise ValueError("Parameters cannot be free variables")
-        if not all(p1.is_compatible(p2) for p1,p2 in zip(parameters,self.parameters)):
-            raise ValueError("Type mismatch")
         return GroundedAction(self, parameters)
         
     def to_pddl(self, typing=True):
@@ -454,24 +440,33 @@ class ActionSchema:
 
 class GroundedAction:
     
-    def __init__(self, schema, parameters):
+    def __init__(self, schema, parameters, verify=False):
         self.schema = schema
         self.parameters = parameters
-        self._sigma = dict(zip(schema.parameters, parameters))
+        self.sigma = dict(zip(schema.parameters, parameters))
+        if verify:
+            self.check_validity()
+
+    def check_validity(self):
+        if len(self.parameters) != self.schema.arity():
+            raise ValueError("Invalid number of parameters")
+        if any(param.is_variable() for param in parameters):
+            raise ValueError("Parameters cannot be free variables")
+        if not all(p1.is_compatible(p2) for p1,p2 in zip(parameters,schema.parameters)):
+            raise ValueError("Type mismatch")
         
     def is_applicable(self, state):
-        sigma = self._sigma
         precondition = self.schema.precondition
-        return all(atom.replace(sigma) in state for atom in precondition)
+        return all(atom.replace(self.sigma) in state for atom in precondition)
         
     def apply(self, state):
         next_state = None
         if self.is_applicable(state):
             next_state = state.copy()
             for atom in self.schema.add_list:
-                next_state.add(atom.replace(self._sigma))
+                next_state.add(atom.replace(self.sigma))
             for atom in self.schema.del_list:
-                next_state.discard(atom.replace(self._sigma))
+                next_state.discard(atom.replace(self.sigma))
         return next_state
     
     def __str__(self):
@@ -481,70 +476,28 @@ class GroundedAction:
         return f"GroundedAction({self})"
 
 
-class _ObjectFactory:
-    def __init__(self, typename):
-        self.typename = typename
-    
-    def __call__(self, objname):
-        return Object(objname, self.typename)
-        
-
-class _AtomFactory:
-    def __init__(self, atom_template, domain=None):
-        self.atom_template = atom_template
-        self._domain = domain
-        
-    def __call__(self, *args):
-        if len(args) != self.atom_template.arity():
-            raise ValueError("Wrong number of arguments")
-        dom = self._domain
-        if dom and not all(dom.is_subtype(arg1.objtype,arg2.objtype) for arg1,arg2 in zip(args, self.atom_template.args)):
-            raise ValueError("Type mismatch")
-        return Atom(self.atom_template.head, *args)
-
-
-def _toposort(hierarchy):
-    remaining_nodes = set(hierarchy)
-    sorted_nodes = []
-    while remaining_nodes:
-        temporary_mark = set()
-        node = next(iter(remaining_nodes))
-        tail = []
-        while node in remaining_nodes:
-            if node in temporary_mark:
-                raise ValueError("Not a DAG")
-            temporary_mark.add(node)
-            tail.append(node)
-            remaining_nodes.remove(node)
-            node = hierarchy[node]
-        sorted_nodes += reversed(tail)
-    return sorted_nodes
-
-
 class Domain:
 
     def __init__(self, name, predicates=None, types=None, actions=None):
         self.name = name
         self.predicates = predicates or []
-        self.types = types
+        self.types = types or []
         self.actions = actions or []
         
-    def declare_type(self, typename, parent="object"):
-        if self.types is None:
-            self.types = {}
-        if callable(parent):
-            parent = parent.typename
-        if parent != "object" and parent not in self.types:
-            raise ValueError(f"Type {parent} not declared")
-        self.types[typename] = parent
-        return _ObjectFactory(typename)
+    def declare_type(self, type_name, parent=None):
+        parent = parent or ROOT_TYPE
+        if type_.parent is not ROOT_TYPE and parent not in self.types:
+            raise ValueError(f"Parent type {parent} not declared")
+        type_ = ObjType(type_name, parent)
+        self.types.append(type_)
+        return type_
         
-    def declare_predicate(self, head, *args):
-        if not all(a.is_variable() for a in args):
-            raise ValueError("All the arguments must be variables")
-        atom = Atom(head, *args)
-        self.predicates.append(atom)
-        return _AtomFactory(atom, self)
+    def declare_predicate(self, head, *parameter_types):
+        if not all(type_ in self.types for type_ in parameter_types):
+            raise ValueError("Type has not been declared")
+        predicate = Predicate(head, *parameter_types)
+        self.predicates.append(predicate)
+        return predicate
         
     def declare_action(self, name, params, pre, add_list, del_list):
         action = ActionSchema(name, params, pre, add_list, del_list)

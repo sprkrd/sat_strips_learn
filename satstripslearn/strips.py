@@ -486,6 +486,8 @@ class Domain:
         
     def declare_type(self, type_name, parent=None):
         parent = parent or ROOT_TYPE
+        if type_name == ROOT_TYPE.name or any(type_name == type_.name for type_ in self.types):
+            raise ValueError(f"Type with name {type_name} already declared")
         if type_.parent is not ROOT_TYPE and parent not in self.types:
             raise ValueError(f"Parent type {parent} not declared")
         type_ = ObjType(type_name, parent)
@@ -493,6 +495,8 @@ class Domain:
         return type_
         
     def declare_predicate(self, head, *parameter_types):
+        if any(head == pred.head  for pred in self.predicates):
+            raise ValueError(f"Predicate with name {head} already declared")
         if not all(type_ in self.types for type_ in parameter_types):
             raise ValueError("Type has not been declared")
         predicate = Predicate(head, *parameter_types)

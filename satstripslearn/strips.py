@@ -266,9 +266,9 @@ class Atom:
     def get_signature(self):
         return (self.head,) + tuple(arg.objtype for arg in self.args)
         
-    def is_compatible(self, other):
-        return self.head == other.head and self.arity() == other.arity() and\
-                all(o1.is_compatible(o2) for o1,o2 in zip(self.args, other.args))
+    def is_compatible(self, pred):
+        return self.head == atom.head and self.arity() == pred.arity() and\
+                all(a1.is_compatible(a2) for a1,a2 in zip(self.args,pred.args))
 
     def arity(self):
         return len(self._data) - 1
@@ -412,6 +412,12 @@ class ActionSchema:
             yield from self._all_groundings_aux2(objects, sigma)
         
     def ground(self, *parameters):
+        if len(parameters) != self.arity():
+            raise ValueError("Invalid number of parameters")
+        if any(param.is_variable() for param in parameters):
+            raise ValueError("Parameters cannot be free variables")
+        if not all(p1.is_compatible(p2) for p1,p2 in zip(parameters,self.parameters)):
+            raise ValueError("Type mismatch")
         return GroundedAction(self, parameters)
         
     def to_pddl(self, typing=True):
@@ -440,20 +446,10 @@ class ActionSchema:
 
 class GroundedAction:
     
-    def __init__(self, schema, parameters, verify=False):
+    def __init__(self, schema, parameters):
         self.schema = schema
         self.parameters = parameters
         self.sigma = dict(zip(schema.parameters, parameters))
-        if verify:
-            self.check_validity()
-
-    def check_validity(self):
-        if len(self.parameters) != self.schema.arity():
-            raise ValueError("Invalid number of parameters")
-        if any(param.is_variable() for param in parameters):
-            raise ValueError("Parameters cannot be free variables")
-        if not all(p1.is_compatible(p2) for p1,p2 in zip(parameters,schema.parameters)):
-            raise ValueError("Type mismatch")
         
     def is_applicable(self, state):
         precondition = self.schema.precondition
@@ -497,7 +493,7 @@ class Domain:
     def declare_predicate(self, head, *parameter_types):
         if any(head == pred.head  for pred in self.predicates):
             raise ValueError(f"Predicate with name {head} already declared")
-        if not all(type_ in self.types for type_ in parameter_types):
+        if not all(type_ == ROOT_TYPE or type_ in self.types for type_ in parameter_types):
             raise ValueError("Type has not been declared")
         predicate = Predicate(head, *parameter_types)
         self.predicates.append(predicate)
@@ -513,8 +509,11 @@ class Domain:
         for param in action.parameters:
             if not param.is_variable():
                 raise ValueError(f"Parameter {param} is not a variable")
+        if any(action.name == other.name for other in self.actions):
+            raise ValueError(f"Action with name {action.name} already exists")
         for atom in chain(action.precondition, action.add_list, action.del_list):
-            atom_signature = atom.get_signature()
+            if not any(atom.is_compatible(pred) for pred in self.predicates):
+                raise ValueError(f"Non-existent predicate signature for {atom}")
             if not any(atom_signature == pred.get_signature() for pred in self.predicates):
                 raise ValueError(f"Non-existent predicate signature: {atom_signature}")
             for arg in atom.args:

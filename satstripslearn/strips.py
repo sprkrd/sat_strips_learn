@@ -222,15 +222,15 @@ class Predicate:
         return len(self.argtypes)
 
     def __call__(self, *args):
-        if len(args) != len(self._argtypes):
+        if len(args) != len(self.argtypes):
             raise ValueError("Invalid number of arguments")
-        if not all(o.objtype.is_subtype(t) for o,t in zip(args,self._argtypes)):
+        if not all(o.objtype.is_subtype(t) for o,t in zip(args,self.argtypes)):
             raise ValueError("Cannot instantiate atom: invalid signature")
-        return Atom(self._head, *args)
+        return Atom(self.head, *args)
 
     def to_pddl(self, include_types=True):
-        dummy_objects = [t(f"?x{i}") for i,t in enumerate(self._argtypes)]
-        atom = Atom(self._head, *dummy_objects)
+        dummy_objects = [t(f"?x{i}") for i,t in enumerate(self.argtypes)]
+        atom = Atom(self.head, *dummy_objects)
         return atom.to_pddl(include_types=True)
 
     def __str__(self):
@@ -267,8 +267,8 @@ class Atom:
         return (self.head,) + tuple(arg.objtype for arg in self.args)
         
     def is_compatible(self, pred):
-        return self.head == atom.head and self.arity() == pred.arity() and\
-                all(a1.is_compatible(a2) for a1,a2 in zip(self.args,pred.args))
+        return self.head == pred.head and self.arity() == pred.arity() and\
+                all(a1.objtype.is_subtype(a2) for a1,a2 in zip(self.args,pred.argtypes))
 
     def arity(self):
         return len(self._data) - 1
@@ -424,10 +424,12 @@ class ActionSchema:
         lines = []
         lines.append("(:action " + self.name)
         if self.parameters:
-            params = _typed_objlist_to_pddl(self.parameters) if typing else " ".join(param.name for param in self.parameters)
+            params = _typed_objlist_to_pddl(self.parameters) if typing\
+                    else _untyped_objlist_to_pddl(self.parameters)
             lines.append(f" :parameters ({params})")
         if self.precondition:
-            precondition = " ".join(["and"] + [atom.to_pddl(include_types=False) for atom in self.precondition])
+            precondition = " ".join(["and"] + [atom.to_pddl(include_types=False)
+                for atom in self.precondition])
             lines.append(f" :precondition ({precondition})")
         if self.add_list or self.del_list:
             effect = ["and"]
@@ -484,7 +486,7 @@ class Domain:
         parent = parent or ROOT_TYPE
         if type_name == ROOT_TYPE.name or any(type_name == type_.name for type_ in self.types):
             raise ValueError(f"Type with name {type_name} already declared")
-        if type_.parent is not ROOT_TYPE and parent not in self.types:
+        if parent is not ROOT_TYPE and parent not in self.types:
             raise ValueError(f"Parent type {parent} not declared")
         type_ = ObjType(type_name, parent)
         self.types.append(type_)
@@ -514,23 +516,12 @@ class Domain:
         for atom in chain(action.precondition, action.add_list, action.del_list):
             if not any(atom.is_compatible(pred) for pred in self.predicates):
                 raise ValueError(f"Non-existent predicate signature for {atom}")
-            if not any(atom_signature == pred.get_signature() for pred in self.predicates):
-                raise ValueError(f"Non-existent predicate signature: {atom_signature}")
             for arg in atom.args:
                 if arg.is_variable() and arg not in action.parameters:
                     raise ValueError(f"Free variable {arg} is not present in the list of parameters")
-        
-    def is_subtype(self, typename1, typename2):
-        types = self.types
-        if types is None:
-            raise ValueError("Domain is not typed")
-        current = typename1
-        while typename1 is not None and typename1 != typename2:
-            typename1 = self.types.get(typename1)
-        return typename1 is not None and typename1 == typename2
          
-    def dump(self, out):
-        typing = self.types is not None
+    def dump_pddl(self, out):
+        typing = bool(self.types)
         
         out.write(f"(define (domain {self.name})\n\n")
         
@@ -540,12 +531,9 @@ class Domain:
             out.write("(:requirements :strips)\n\n")
             
         if typing:
-            sorted_types = _toposort(self.types)
             out.write("(:types\n")
-            for t in sorted_types:
-                parent = self.types[t]
-                out.write(f"{t} - {parent}\n")
-            out.write(")\n\n")
+            out.write(_typelist_to_pddl(self.types, break_lines=True))
+            out.write("\n)\n\n")
             
         out.write("(:predicates\n")
         for predicate in self.predicates:
@@ -559,7 +547,7 @@ class Domain:
 
     def to_pddl(self):
         with StringIO() as out:
-            self.dump(out)
+            self.dump_pddl(out)
             ret = out.getvalue()
         return ret
         

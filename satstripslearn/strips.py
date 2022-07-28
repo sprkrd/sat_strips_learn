@@ -3,8 +3,31 @@ from itertools import chain
 
 
 class ObjType:
+    """An object type, as those used in PDDL to narrow down the sets of objects
+    that can be used for predicate or action's arguments. This class allows
+    to establush hierarchies of types.
+
+    Parameters
+    ----------
+    name : str
+        Name identifying the object.
+
+    parent : ObjType
+        Parent type, can be None.
+
+    Attributes
+    ----------
+    name : str
+        Same as input given parameter
+
+    parent : ObjType
+        Same as input given parameter
+    """
 
     def __init__(self, name, parent=None):
+        """
+
+        """
         self.name = name
         self.parent = parent
 
@@ -26,10 +49,12 @@ class ObjType:
     def __repr__(self):
         return f"ObjType({self})"
 
-    def __call__(self, *args):
-        if len(args) == 1:
-            return Object(args[0], self)
-        return tuple(Object(arg,self) for arg in args)
+    def __call__(self, arg):
+        """
+        Allows to use the ObjType in a functional way to create new objects of
+        a given type.
+        """
+        return Object(arg, self)
 
 
 ROOT_TYPE = ObjType("object")
@@ -562,11 +587,11 @@ class Problem:
         self.objects = objects or set()
         self.init = init or []
         self.goal = goal or []
-        
+ 
     def add_object(self, obj):
         if obj.is_variable():
             raise ValueError("Cannot add variable to object list")
-        self.objects.add(obj)
+        self.objects.append(obj)
         
     def _check_atom(self, atom):
         if atom.is_lifted():
@@ -582,39 +607,35 @@ class Problem:
         self._check_atom(atom)
         self.goal.append(atom)
         
-    def dump(self, out):
+    def dump_pddl(self, out):
         typing = self.domain.types is not None
-        out.write(f"(define (problem {self.name}) (:domain {self.domain.name})\n")
+        out.write(f"(define (problem {self.name}) (:domain {self.domain.name})\n\n")
         out.write("(:objects\n")
+        objects = sorted(self.objects, key=lambda o: (o.objtype.name, o.name))
         if typing:
-            objects = sorted(self.objects, key=lambda o: (o.objtype, o.name))
             out.write(_typed_objlist_to_pddl(objects, break_lines=True))
         else:
-            out.write(" ".join(o.name for o in self.objects))
-        out.write("\n)\n")
+            out.write(_untyped_objlist_to_pddl(objects))
+        out.write("\n)\n\n")
         out.write("(:init\n")
         for atom in self.init:
-            out.write(atom.to_pddl(include_type=False))
+            out.write(atom.to_pddl(include_types=False))
             out.write("\n")
-        out.write(")\n")
+        out.write(")\n\n")
         out.write("(:goal (and\n")
-        for atom in goal:
-            out.write(atom.to_pddl(include_type=False))
+        for atom in self.goal:
+            out.write(atom.to_pddl(include_types=False))
             out.write("\n")
         out.write("))\n)\n")
 
     def to_pddl(self):
         with StringIO() as out:
-            self.dump(out)
-            ret = out.getvalue()
-        return ret
-
-        
-    def __str__(self):
-        with StringIO() as out:
             self.dump_pddl(out)
             ret = out.getvalue()
         return ret
+ 
+    def __str__(self):
+        return self.to_pddl()
 
 
 if __name__ == "__main__":

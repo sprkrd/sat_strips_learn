@@ -50,3 +50,7 @@ print(groundings[0].apply(state))
 print(groundings)
 
 print(dom)
+
+problem = Problem("myproblem", dom, set(objects), list(state), [At(robot, b2)])
+
+print(problem)

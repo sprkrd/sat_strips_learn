@@ -42,7 +42,7 @@ class LabeledAtom:
         """
         See help(type(self)).
         """
-        if section not in sectionS:
+        if section not in ACTION_SECTIONS:
             raise ValueError(f"Unrecognized LabeledAtom type: {section}. "
                              f"The available types are defined in sectionS.")
         self.atom = atom

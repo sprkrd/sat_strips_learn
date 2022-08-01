@@ -10,7 +10,7 @@ class LabeledAtom:
 
     A LabeledAtom consist of (1) a regular strips.Atom; (2) the section of the
     action it belongs to (i.e. either the precondition, the add list or the delete list),
-    and a boolean flag 
+    and a boolean flag
 
     Parameters
     ----------
@@ -83,7 +83,7 @@ class LabeledAtom:
 
 class State:
     """
-    Represents a symbolic state, that is, a collection of atomic facts 
+    Represents a symbolic state, that is, a collection of atomic facts
     (instantiated predicates) that describe the world. Partially observability
     is supported (or, alternatively, one could think about open world states),
     so some atoms can be specified as "may be true".
@@ -134,10 +134,10 @@ class State:
             return (self.atoms&other.uncertain_atoms) |\
                    (self.uncertain_atoms-other.atoms)
         return self.atoms - other.atoms - other.uncertain_atoms
-        
+
     def is_uncertain(self):
         return bool(self.uncertain_atoms)
-        
+
     def copy(self):
         return State(self.atoms.copy(), self.uncertain_atoms.copy())
 
@@ -212,8 +212,7 @@ class Action:
         del_list = [atom.atom for atom in self.get_atoms_in_section(["del"], keep_uncertain)]
         return StripsAction(name, parameters, precondition, add_list, del_list)
 
-
-    def get_referenced_objects(self, sections=None):
+    def get_referenced_objects(self, sections=None, include_uncertain=True, as_set=True):
         """
         Extracts the set of objects referenced by this action.
 
@@ -231,11 +230,11 @@ class Action:
             Set containing the Object instances found in the specified section's
             labeled atoms
         """
-        sections = sections or ACTION_SECTIONS
         objects = set()
-        for atom in self.atoms:
-            if atom.section in sections:
-                objects.update(atom.atom.args)
+        for atom in self.get_atoms_in_section(sections, include_uncertain):
+            objects.update(atom.atom.args)
+        if not as_set:
+            objects = list(objects)
         return objects
 
     def get_role_count(self, sections=None, include_uncertain=True):
@@ -406,4 +405,3 @@ class Action:
                 r"\end{flushleft}"
         ]
         return "\n".join(lines)
-

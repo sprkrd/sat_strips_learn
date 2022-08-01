@@ -1,5 +1,5 @@
 from io import StringIO
-from itertools import chain 
+from itertools import chain
 
 
 class ObjType:
@@ -39,10 +39,10 @@ class ObjType:
 
     def is_supertype(self, other):
         return other.is_subtype(self)
-        
+
     def to_pddl(self):
         return self.name + " - " + self.parent.name if self.parent else self.name
-        
+
     def __str__(self):
         return self.to_pddl()
 
@@ -79,7 +79,7 @@ class Object:
     objtype : str
         Same as the value passed as parameter.
     """
-    
+
     def __init__(self, name, objtype=ROOT_TYPE):
         """
         See help(type(self)).
@@ -90,7 +90,7 @@ class Object:
     def name(self):
         """
         Convenience method to extract the name from the internal data
-        
+
         Return
         ------
         name : str
@@ -101,7 +101,7 @@ class Object:
     def objtype(self):
         """
         Convenience method to extract the object type from the internal data
-        
+
         Return
         ------
         obtype : str
@@ -116,19 +116,19 @@ class Object:
         Given a substitution, returns either the same object if it is not
         present as a key in the substitution, or the substituting object
         if it is.
-        
+
         Parameters
         ----------
         sigma : dict
             A Object -> Object dictionary representing a substitution.
             This object (self) may or may not be present in this substitution
             as a key.
-        
+
         Return
         ------
         obj : Object
             Either self, if self is not present in sigma, or sigma[self]
-            
+
         Examples
         --------
         >>> _x, _y, a = Object("?x"), Object("?y"), Object("a")
@@ -148,7 +148,7 @@ class Object:
         out : bool
         """
         return self.name[0] == "?"
-        
+
     def to_pddl(self, include_type=True):
         """
         PDDL string representation of the object.
@@ -188,8 +188,8 @@ class Object:
 
     def __repr__(self):
         return f"Object({self})"
-        
-        
+
+
 def _typed_objlist_to_pddl(objlist, break_lines=False):
     lines = []
     current_line = []
@@ -232,7 +232,7 @@ def _typelist_to_pddl(typelist, break_lines=False):
         lines.append(" ".join(current_line))
     sep = "\n" if break_lines else " "
     return sep.join(lines)
- 
+
 
 class Predicate:
     def __init__(self, head, *args):
@@ -260,7 +260,7 @@ class Predicate:
 
     def __str__(self):
         return self.to_pddl()
-        
+
     def __repr__(self):
         return f"Predicate({self})"
 
@@ -287,10 +287,10 @@ class Atom:
     @property
     def args(self):
         return self._data[1:]
-        
+
     def get_signature(self):
         return (self.head,) + tuple(arg.objtype for arg in self.args)
-        
+
     def is_compatible(self, pred):
         return self.head == pred.head and self.arity() == pred.arity() and\
                 all(a1.objtype.is_subtype(a2) for a1,a2 in zip(self.args,pred.argtypes))
@@ -301,10 +301,10 @@ class Atom:
     def replace(self, sigma):
         replaced_args = (arg.replace(sigma) for arg in self.args)
         return Atom(self.head, *replaced_args)
-        
+
     def is_lifted(self):
         return any(arg.is_variable() for arg in self.args)
-        
+
     def to_pddl(self, include_types=True):
         args = self.args
         if args:
@@ -384,20 +384,20 @@ def _match_unify(refatom, atom, sigma=None):
 
 
 class ActionSchema:
-    
+
     def __init__(self, name, parameters=None, precondition=None, add_list=None, del_list=None):
         self.name = name
         self.parameters = parameters or []
         self.precondition = precondition or []
         self.add_list = add_list or []
         self.del_list = del_list or []
-        
+
     def get_signature(self):
         return (self.name,) + tuple(param.objtype for param in self.parameters)
-        
+
     def arity(self):
         return len(self.parameters)
-                    
+
     def _all_groundings_aux1(self, state):
         pre = self.precondition
         stack = [(0,{})]
@@ -414,7 +414,7 @@ class ActionSchema:
                         stack.append((idx+1,sigma_new))
             elif atom in state:
                 stack.append((idx+1, sigma))
-                
+
     def _all_groundings_aux2(self, objects, sigma0):
         stack = [(0,sigma0)]
         while stack:
@@ -431,11 +431,11 @@ class ActionSchema:
                             sigma_new = sigma.copy()
                             sigma_new[param] = obj
                             stack.append((param_idx+1,sigma_new))
-                    
+
     def all_groundings(self, objects, state):
         for sigma in self._all_groundings_aux1(state):
             yield from self._all_groundings_aux2(objects, sigma)
-        
+
     def ground(self, *parameters):
         if len(parameters) != self.arity():
             raise ValueError("Invalid number of parameters")
@@ -444,7 +444,7 @@ class ActionSchema:
         if not all(p1.is_compatible(p2) for p1,p2 in zip(parameters,self.parameters)):
             raise ValueError("Type mismatch")
         return GroundedAction(self, parameters)
-        
+
     def to_pddl(self, typing=True):
         lines = []
         lines.append("(:action " + self.name)
@@ -466,22 +466,22 @@ class ActionSchema:
             lines.append(f" :effect ({effect})")
         lines.append(")")
         return "\n".join(lines)
-        
+
     def __str__(self):
         return self.to_pddl(typing=True)
 
 
 class GroundedAction:
-    
+
     def __init__(self, schema, parameters):
         self.schema = schema
         self.parameters = parameters
         self.sigma = dict(zip(schema.parameters, parameters))
-        
+
     def is_applicable(self, state):
         precondition = self.schema.precondition
         return all(atom.replace(self.sigma) in state for atom in precondition)
-        
+
     def apply(self, state):
         next_state = None
         if self.is_applicable(state):
@@ -491,10 +491,10 @@ class GroundedAction:
             for atom in self.schema.del_list:
                 next_state.discard(atom.replace(self.sigma))
         return next_state
-    
+
     def __str__(self):
         return self.schema.name + "(" + ",".join(obj.name for obj in self.parameters) + ")"
-        
+
     def __repr__(self):
         return f"GroundedAction({self})"
 
@@ -506,7 +506,7 @@ class Domain:
         self.predicates = predicates or []
         self.types = types or []
         self.actions = actions or []
-        
+
     def declare_type(self, type_name, parent=None):
         parent = parent or ROOT_TYPE
         if type_name == ROOT_TYPE.name or any(type_name == type_.name for type_ in self.types):
@@ -516,7 +516,7 @@ class Domain:
         type_ = ObjType(type_name, parent)
         self.types.append(type_)
         return type_
-        
+
     def declare_predicate(self, head, *parameter_types):
         if any(head == pred.head  for pred in self.predicates):
             raise ValueError(f"Predicate with name {head} already declared")
@@ -525,12 +525,15 @@ class Domain:
         predicate = Predicate(head, *parameter_types)
         self.predicates.append(predicate)
         return predicate
-        
+
     def declare_action(self, name, params, pre, add_list, del_list):
         action = ActionSchema(name, params, pre, add_list, del_list)
+        self.add_action(action)
+        return action
+
+    def add_action(self, action):
         self._verify_action(action)
         self.actions.append(action)
-        return action
 
     def _verify_action(self, action):
         for param in action.parameters:
@@ -544,30 +547,30 @@ class Domain:
             for arg in atom.args:
                 if arg.is_variable() and arg not in action.parameters:
                     raise ValueError(f"Free variable {arg} is not present in the list of parameters")
-         
+
     def dump_pddl(self, out):
         typing = bool(self.types)
-        
+
         out.write(f"(define (domain {self.name})\n\n")
-        
+
         if typing:
             out.write("(:requirements :strips :typing)\n\n")
         else:
             out.write("(:requirements :strips)\n\n")
-            
+
         if typing:
             out.write("(:types\n")
             out.write(_typelist_to_pddl(self.types, break_lines=True))
             out.write("\n)\n\n")
-            
+
         out.write("(:predicates\n")
         for predicate in self.predicates:
             out.write(predicate.to_pddl(typing) + "\n")
         out.write(")\n\n")
-        
+
         for action in self.actions:
             out.write(action.to_pddl(typing) + "\n\n")
-            
+
         out.write(")\n")
 
     def to_pddl(self):
@@ -575,11 +578,11 @@ class Domain:
             self.dump_pddl(out)
             ret = out.getvalue()
         return ret
-        
+
     def __str__(self):
         return self.to_pddl()
-        
-        
+
+
 class Problem:
     def __init__(self, name, domain=None, objects=None, init=None, goal=None):
         self.name = name
@@ -587,26 +590,26 @@ class Problem:
         self.objects = objects or set()
         self.init = init or []
         self.goal = goal or []
- 
+
     def add_object(self, obj):
         if obj.is_variable():
             raise ValueError("Cannot add variable to object list")
         self.objects.append(obj)
-        
+
     def _check_atom(self, atom):
         if atom.is_lifted():
             raise ValueError("Cannot add atoms with free variables to init section")
         if not all(arg in self.objects for arg in atom.args):
             raise ValueError("All the objects must be in the object list")
-        
+
     def add_init_atom(self, atom):
         self._check_atom(atom)
         self.init.append(atom)
-        
+
     def add_goal_atom(self, atom):
         self._check_atom(atom)
         self.goal.append(atom)
-        
+
     def dump_pddl(self, out):
         typing = self.domain.types is not None
         out.write(f"(define (problem {self.name}) (:domain {self.domain.name})\n\n")
@@ -633,7 +636,7 @@ class Problem:
             self.dump_pddl(out)
             ret = out.getvalue()
         return ret
- 
+
     def __str__(self):
         return self.to_pddl()
 

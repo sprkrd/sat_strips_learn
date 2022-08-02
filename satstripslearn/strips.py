@@ -26,7 +26,7 @@ class ObjType:
 
     def __init__(self, name, parent=None):
         """
-
+        See help(type(self)).
         """
         self.name = name
         self.parent = parent

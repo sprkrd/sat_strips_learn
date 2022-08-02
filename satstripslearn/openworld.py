@@ -193,10 +193,7 @@ class Action:
         self.atoms = atoms
         self.parent = parent
         if parameters is None:
-            parameters = set()
-            for atom in atoms:
-                parameters.update(arg for arg in atom.atom.args if arg.is_variable())
-            parameters = list(parameters)
+            parameters = [obj for obj in self.get_referenced_objects() if obj.is_variable()]
         self.parameters = parameters
         self.domain = domain
 

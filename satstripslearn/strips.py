@@ -391,6 +391,16 @@ class ActionSchema:
         self.precondition = precondition or []
         self.add_list = add_list or []
         self.del_list = del_list or []
+        self._verify()
+
+    def _verify(self):
+        for param in self.parameters:
+            if not param.is_variable():
+                raise ValueError(f"Parameter {param} is not a variable")
+        for atom in chain(self.precondition, self.add_list, self.del_list):
+            for arg in atom.args:
+                if arg.is_variable() and arg not in self.parameters:
+                    raise ValueError(f"Free variable {arg} is not present in the list of parameters")
 
     def get_signature(self):
         return (self.name,) + tuple(param.objtype for param in self.parameters)
@@ -536,17 +546,11 @@ class Domain:
         self.actions.append(action)
 
     def _verify_action(self, action):
-        for param in action.parameters:
-            if not param.is_variable():
-                raise ValueError(f"Parameter {param} is not a variable")
         if any(action.name == other.name for other in self.actions):
             raise ValueError(f"Action with name {action.name} already exists")
         for atom in chain(action.precondition, action.add_list, action.del_list):
             if not any(atom.is_compatible(pred) for pred in self.predicates):
                 raise ValueError(f"Non-existent predicate signature for {atom}")
-            for arg in atom.args:
-                if arg.is_variable() and arg not in action.parameters:
-                    raise ValueError(f"Free variable {arg} is not present in the list of parameters")
 
     def dump_pddl(self, out):
         typing = bool(self.types)

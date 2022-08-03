@@ -1,4 +1,5 @@
-from strips import ActionSchema as StripsAction
+from .strips import ActionSchema as StripsAction
+from .utils import dict_leq
 
 
 ACTION_SECTIONS = ["pre", "add", "del"]
@@ -70,12 +71,17 @@ class LabeledAtom:
         """
         return LabeledAtom(self.atom.replace(sigma), self.certain, self.section)
 
-    def __str__(self):
+    def to_str(self, show_section=True):
         ret = self.atom.to_pddl(True)
         if not self.certain:
-            ret = "?" + ret
-        ret = self.section + ":" + ret
+            ret = ret + "?"
+        if show_section:
+            ret = self.section + ":" + ret
         return ret
+
+
+    def __str__(self):
+        return self.to_str()
 
     def __repr__(self):
         return f"LabeledAtom({self})"
@@ -160,18 +166,14 @@ class Action:
     ----------
     name : str
         Name identifying the action
-    atoms : list
-        List of LabeledAtom objects, each one representing a labeled predicate
-        (i.e. a predicate that appears in the add list, the delete list,
-        or the precondition of this action)
-    parent : ActionCluster
-        Should this Action be the result of merging two actions, this parameter
-        must point to the cluster that represents the parents (see ActionCluster).
-        Usually this is not filled by the user, but by the cluster method.
     parameters: list
         List of strips.Object, all of them variables, representing the parameters
         of the action. If set to None, the parameters are extracted from the
         labeled atoms.
+    atoms : list
+        List of LabeledAtom objects, each one representing a labeled predicate
+        (i.e. a predicate that appears in the add list, the delete list,
+        or the precondition of this action)
 
     Attributes
     ----------
@@ -185,24 +187,15 @@ class Action:
         List of parameters of this action
     """
 
-    def __init__(self, name, atoms, parent=None, parameters=None, domain=None):
+    def __init__(self, name, parameters=None, atoms=None):
         """
         See help(type(self)).
         """
         self.name = name
-        self.atoms = atoms
-        self.parent = parent
+        self.atoms = atoms or []
         if parameters is None:
-            parameters = set()
-            for atom in atoms:
-                parameters.update(arg for arg in atom.atom.args if arg.is_variable())
-            parameters = list(parameters)
+            parameters = [obj for obj in self.get_referenced_objects() if obj.is_variable()]
         self.parameters = parameters
-        self.domain = domain
-
-    def get_atoms_in_section(self, sections=None, include_uncertain=True):
-        section = section or ACTION_SECTIONS
-        return [atom for atom in self.atoms if atom.section in sections and (atom.certain or include_uncertain)]
 
     def to_strips(self, keep_uncertain=True):
         name = self.name
@@ -211,6 +204,11 @@ class Action:
         add_list = [atom.atom for atom in self.get_atoms_in_section(["add"], keep_uncertain)]
         del_list = [atom.atom for atom in self.get_atoms_in_section(["del"], keep_uncertain)]
         return StripsAction(name, parameters, precondition, add_list, del_list)
+
+    def get_atoms_in_section(self, sections=None, include_uncertain=True):
+        sections = sections or ACTION_SECTIONS
+        return [atom for atom in self.atoms if atom.section in sections
+                and (atom.certain or include_uncertain)]
 
     def get_referenced_objects(self, sections=None, include_uncertain=True, as_set=True):
         """
@@ -257,36 +255,38 @@ class Action:
         """
         sections = sections or ACTION_SECTIONS
         role_count = {}
-        for atom in self.atoms:
-            if atom.section in sections and (atom.certain or include_uncertain):
-                head = atom.atom.head
-                role_count[head] = role_count.get(head, 0) + 1
+        for atom in self.get_atoms_in_section(sections, include_uncertain):
+            head = atom.atom.head
+            role_count[head] = role_count.get(head, 0) + 1
         return role_count
 
     def cluster_broadphase(self, other):
         """
         Simply compares the number of predicates of each type in the effects of
         self and another action to make sure that they may be potentially
-        clustered. This is a very easy check before bringing the big guns
-        and trying to cluster the actions.
+        clustered. This is a very easy check before resorting to more complex
+        techniques.
 
         Examples
         --------
-        >>> a = Action("a", [
-        ...     Feature(("p","x"), feature_type="add", certain=True),
-        ...     Feature(("p","y"), feature_type="add", certain=False),
-        ...     Feature(("p","s"), feature_type="del", certain=True),
-        ...     Feature(("p","t"), feature_type="del", certain=True),
-        ...     Feature(("p","u"), feature_type="del", certain=False)])
-        >>> b = Action("b", [
-        ...     Feature(("p","x"), feature_type="add", certain=True),
-        ...     Feature(("p","y"), feature_type="add", certain=True),
-        ...     Feature(("p","t"), feature_type="del", certain=False),
-        ...     Feature(("p","u"), feature_type="del", certain=False)])
-        >>> c = Action("c", [
-        ...     Feature(("p","x"), feature_type="add", certain=True),
-        ...     Feature(("p","y"), feature_type="add", certain=True),
-        ...     Feature(("p","u"), feature_type="del", certain=False)])
+        >>> from .strips import Object, Predicate, ROOT_TYPE
+        >>> P = Predicate("p", ROOT_TYPE)
+        >>> x, y, s, t, u = [Object(obj) for obj in "xystu"]
+        >>> a = Action("a", atoms=[
+        ...     LabeledAtom(P(x), section="add", certain=True),
+        ...     LabeledAtom(P(y), section="add", certain=False),
+        ...     LabeledAtom(P(s), section="del", certain=True),
+        ...     LabeledAtom(P(t), section="del", certain=True),
+        ...     LabeledAtom(P(u), section="del", certain=False)])
+        >>> b = Action("b", atoms=[
+        ...     LabeledAtom(P(x), section="add", certain=True),
+        ...     LabeledAtom(P(y), section="add", certain=True),
+        ...     LabeledAtom(P(t), section="del", certain=False),
+        ...     LabeledAtom(P(u), section="del", certain=False)])
+        >>> c = Action("c", atoms=[
+        ...     LabeledAtom(P(x), section="add", certain=True),
+        ...     LabeledAtom(P(y), section="add", certain=True),
+        ...     LabeledAtom(P(u), section="del", certain=False)])
         >>> a.cluster_broadphase(b)
         True
         >>> a.cluster_broadphase(c)
@@ -307,6 +307,18 @@ class Action:
         return True
 
     @staticmethod
+    def from_strips(strips_action):
+        name = strips_action.name
+        parameters = strips_action.parameters
+        atoms = [LabeledAtom(atom, section="pre")
+                for atom in strips_action.precondition]
+        atoms += [LabeledAtom(atom, section="add")
+                for atom in strips_action.add_list]
+        atoms += [LabeledAtom(atom, section="del")
+                for atom in strips_action.del_list]
+        return Action(name, parameters, atoms)
+
+    @staticmethod
     def from_transition(name, s, s_next, lifted=False):
         """
         Static constructor that takes two states that are interpreted as successive
@@ -324,15 +336,19 @@ class Action:
 
         Examples
         --------
-        >>> s1 = State({("a",), ("b",)}, {("c",), ("d",), ("e",)})
-        >>> s2 = State({("a",), ("d",), ("f",)}, {("c",), ("e",)})
-        >>> print(Action.from_transition(s1, s2, name="a"))
+        >>> from .strips import Predicate
+        >>> A, B, C, D, E, F = [Predicate(p) for p in "abcdef"]
+        >>> s1 = State({A(), B()}, {C(), D(), E()})
+        >>> s2 = State({A(), D(), F()}, {C(), E()})
+        >>> action = Action.from_transition("a", s1, s2)
+        >>> action.atoms.sort(key=lambda atom: atom.atom.head)
+        >>> print(action)
         Action{
           name = a,
           parameters = [],
-          precondition = [a(), b(), c()?, d()?, e()?],
-          add list = [c()?, d()?, e()?, f()],
-          del list = [b(), c()?, e()?]
+          precondition = [(a), (b), (c)?, (d)?, (e)?],
+          add list = [(c)?, (d)?, (e)?, (f)],
+          del list = [(b), (c)?, (e)?]
         }
         """
         name = name or action_id_gen()
@@ -353,15 +369,14 @@ class Action:
             atoms.append(LabeledAtom(atom, section="del"))
         for atom in del_uncertain:
             atoms.append(LabeledAtom(atom, section="del", certain=False))
-        return Action(name, atoms)
+        return Action(name, None, atoms)
 
     def __str__(self):
         name = self.name
-        grouped_features = self.get_grouped_features()
-        par_str = ", ".join(self.get_parameters())
-        pre_str = ", ".join(str(feat) for feat in self.get_features_of_type("pre"))
-        add_str = ", ".join(str(feat) for feat in self.get_features_of_type("add"))
-        del_str = ", ".join(str(feat) for feat in self.get_features_of_type("del"))
+        par_str = ", ".join(str(param) for param in self.parameters)
+        pre_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("pre"))
+        add_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("add"))
+        del_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("del"))
         return  "Action{\n"\
                f"  name = {name},\n"\
                f"  parameters = [{par_str}],\n"\
@@ -373,29 +388,12 @@ class Action:
     def __repr__(self):
         return f"Action{{name={self.name}, {len(self.features)} features}}"
 
-    def to_pddl(self, include_uncertain=True):
-        name = self.name
-        grouped_features = self.get_grouped_features()
-        par_str = " ".join(map(prolog_to_pddl,self.get_parameters()))
-        pre_str = " ".join(atom_to_pddl(feat.atom)
-            for feat in self.get_features_of_type("pre") if feat.certain or include_uncertain)
-        add_str = " ".join(atom_to_pddl(feat.atom)
-            for feat in self.get_features_of_type("add") if feat.certain or include_uncertain)
-        del_str = " ".join(f"(not {atom_to_pddl(feat.atom)})"
-            for feat in self.get_features_of_type("del") if feat.certain or include_uncertain)
-        return f"(:action {name}\n"\
-               f"  parameters: ({par_str})\n"\
-               f"  precondition: (and {pre_str})\n"\
-               f"  effect: (and {add_str} {del_str})\n"\
-                ")"
-
     def to_latex(self):
         name = self.name
-        grouped_features = self.get_grouped_features()
-        par_str = ", ".join(self.get_parameters())
-        pre_str = ", ".join(str(feat) for feat in self.get_features_of_type("pre"))
-        add_str = ", ".join(str(feat) for feat in self.get_features_of_type("add"))
-        del_str = ", ".join(str(feat) for feat in self.get_features_of_type("del"))
+        par_str = ", ".join(str(param) for param in self.parameters)
+        pre_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("pre"))
+        add_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("add"))
+        del_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("del"))
         lines = [
                 r"\begin{flushleft}",
                 fr"\underline{{{name.capitalize()}({par_str}):}}\\",
@@ -405,3 +403,8 @@ class Action:
                 r"\end{flushleft}"
         ]
         return "\n".join(lines)
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
+

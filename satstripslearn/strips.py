@@ -398,7 +398,33 @@ class ActionSchema:
     def arity(self):
         return len(self.parameters)
 
+    # def _all_groundings_aux1(self, state):
+    #     pre = self.precondition
+    #     stack = [(0,{})]
+    #     while stack:
+    #         idx, sigma = stack.pop()
+    #         if idx == len(pre):
+    #             yield sigma
+    #             continue
+    #         atom = pre[idx].replace(sigma)
+    #         if atom.is_lifted():
+    #             for refatom in state:
+    #                 sigma_new = _match_unify(refatom, atom, sigma)
+    #                 if sigma_new is not None:
+    #                     stack.append((idx+1,sigma_new))
+    #         elif atom in state:
+    #             stack.append((idx+1, sigma))
+
+    def _variables_in_preconditions(self):
+        variables = set()
+        for atom in self.precondition:
+            variables.update(arg for arg in atom.args if arg.is_variable())
+        return variables
+
     def _all_groundings_aux1(self, state):
+        grouped_state = {}
+        for atom in state:
+            grouped_state.setdefault(atom.head, []).append(atom)
         pre = self.precondition
         stack = [(0,{})]
         while stack:
@@ -408,7 +434,7 @@ class ActionSchema:
                 continue
             atom = pre[idx].replace(sigma)
             if atom.is_lifted():
-                for refatom in state:
+                for refatom in grouped_state.get(atom.head, []):
                     sigma_new = _match_unify(refatom, atom, sigma)
                     if sigma_new is not None:
                         stack.append((idx+1,sigma_new))
@@ -433,8 +459,14 @@ class ActionSchema:
                             stack.append((param_idx+1,sigma_new))
 
     def all_groundings(self, objects, state):
-        for sigma in self._all_groundings_aux1(state):
-            yield from self._all_groundings_aux2(objects, sigma)
+        if len(self._variables_in_preconditions()) == len(self.parameters):
+            print("Case #1")
+            for sigma in self._all_groundings_aux1(state):
+                yield self.ground(*(sigma[param] for param in self.parameters))
+        else:
+            print("Case #2")
+            for sigma in self._all_groundings_aux1(state):
+                yield from self._all_groundings_aux2(objects, sigma)
 
     def ground(self, *parameters):
         if len(parameters) != self.arity():

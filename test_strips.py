@@ -40,7 +40,7 @@ state = {At(robot, a1),
          Adjacent(a2, b2),
          Adjacent(b2, a2)
 }
-         
+
 objects = [robot, a1, a2, b1, b2]
 
 groundings = list(Move.all_groundings(objects, state))

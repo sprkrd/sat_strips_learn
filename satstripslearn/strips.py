@@ -383,7 +383,7 @@ def _match_unify(refatom, atom, sigma=None):
     return sigma
 
 
-class ActionSchema:
+class Action:
 
     def __init__(self, name, parameters=None, precondition=None, add_list=None, del_list=None):
         self.name = name
@@ -569,7 +569,7 @@ class Domain:
         return predicate
 
     def declare_action(self, name, params, pre, add_list, del_list):
-        action = ActionSchema(name, params, pre, add_list, del_list)
+        action = Action(name, params, pre, add_list, del_list)
         self.add_action(action)
         return action
 

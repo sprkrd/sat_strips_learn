@@ -1,4 +1,4 @@
-from .strips import ActionSchema as StripsAction
+from .strips import Action as StripsAction
 from .utils import dict_leq
 
 
@@ -194,8 +194,19 @@ class Action:
         self.name = name
         self.atoms = atoms or []
         if parameters is None:
-            parameters = [obj for obj in self.get_referenced_objects() if obj.is_variable()]
-        self.parameters = parameters
+            self.parameters = [obj for obj in self.get_referenced_objects() if obj.is_variable()]
+        else:
+            self.parameters = parameters
+            self._verify()
+
+    def _verify(self):
+        for param in self.parameters:
+            if not param.is_variable():
+                assert ValueError("Parameters must be variables")
+        for atom in self.atoms:
+            for arg in atom.atom.args:
+                if arg.is_variable() and arg not in self.parameters:
+                    raise ValueError(f"Variable {arg} is not present in the list of parameters")
 
     def to_strips(self, keep_uncertain=True):
         name = self.name
@@ -407,4 +418,3 @@ class Action:
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
-

@@ -31,6 +31,25 @@ class ObjType:
         self.name = name
         self.parent = parent
 
+    def get_path_from_root(self):
+        path = []
+        self = current
+        while current is not None:
+            path.append(current)
+            current = current.parent
+        path.reverse()
+        return path
+
+    def lca(self, other):
+        path_to_self = self.get_path_from_root()
+        path_to_other = other.get_path_from_root()
+        lca = None
+        for n1,n2 in zip(path_to_self, path_to_other):
+            if n1 != n2:
+                break
+            lca = n1
+        return lca
+
     def is_subtype(self, other):
         current = self
         while current is not None and current is not other:
@@ -243,6 +262,11 @@ class Predicate:
         self.head = head
         self.argtypes = args
 
+    def has_generated(self, atom):
+        return atom.head == self.head and atom.arity() == self.arity() and\
+               all(a1.objtype.is_subtype(a2)
+                   for a1,a2 in zip(atom.args,self.argtypes))
+
     def arity(self):
         return len(self.argtypes)
 
@@ -291,9 +315,8 @@ class Atom:
     def get_signature(self):
         return (self.head,) + tuple(arg.objtype for arg in self.args)
 
-    def is_compatible(self, pred):
-        return self.head == pred.head and self.arity() == pred.arity() and\
-                all(a1.objtype.is_subtype(a2) for a1,a2 in zip(self.args,pred.argtypes))
+    def is_compatible(self, other):
+        return self.head == other.head and self.arity() == other.arity()
 
     def arity(self):
         return len(self._data) - 1
@@ -581,7 +604,7 @@ class Domain:
         if any(action.name == other.name for other in self.actions):
             raise ValueError(f"Action with name {action.name} already exists")
         for atom in chain(action.precondition, action.add_list, action.del_list):
-            if not any(atom.is_compatible(pred) for pred in self.predicates):
+            if not any(pred.has_generated(atom) for pred in self.predicates):
                 raise ValueError(f"Non-existent predicate signature for {atom}")
 
     def dump_pddl(self, out):

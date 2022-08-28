@@ -1,4 +1,4 @@
-from .strips import Action as StripsAction
+from .strips import Action as StripsAction, Predicate
 from .utils import dict_leq
 
 
@@ -85,6 +85,13 @@ class LabeledAtom:
 
     def __repr__(self):
         return f"LabeledAtom({self})"
+
+
+def wrap_predicate(head, *args):
+    predicate = Predicate(head, *args)
+    def f(*args, section="pre", certain=True):
+        return LabeledAtom(predicate(*args), section=section, certain=certain)
+    return f
 
 
 class State:
@@ -221,7 +228,7 @@ class Action:
         return [atom for atom in self.atoms if atom.section in sections
                 and (atom.certain or include_uncertain)]
 
-    def get_referenced_objects(self, sections=None, include_uncertain=True, as_set=True):
+    def get_referenced_objects(self, sections=None, include_uncertain=True, as_list=False):
         """
         Extracts the set of objects referenced by this action.
 
@@ -230,8 +237,8 @@ class Action:
         sections : iterable or None
             A (sub)set of ACTION_SECTIONS, the type(s) of the features where this
             method must look into in the search for objects.
-        as_set : bool
-            Indicates whether to return the result as a set (True) or as a list (False)
+        as_list : bool
+            Indicates whether to return the result as a list (True) or as a set (False)
 
         Returns
         -------
@@ -245,77 +252,6 @@ class Action:
         if not as_set:
             objects = list(objects)
         return objects
-
-    def get_role_count(self, sections=None, include_uncertain=True):
-        """
-        Count the number of occurrences of each atom *role* (i.e. the head
-        of the atom) of the given section(s).
-
-        Parameters
-        ----------
-        sections : iterable or None
-            A (sub)set of ACTION_SECTIONS, the type(s) of the atom that this
-            method should consider.
-        include_uncertain : bool
-            Whether or not to count uncertain atoms.
-
-        Returns
-        -------
-        out : dict
-            A dict from predicate symbols (str) to number of occurrences (int).
-        """
-        sections = sections or ACTION_SECTIONS
-        role_count = {}
-        for atom in self.get_atoms_in_section(sections, include_uncertain):
-            head = atom.atom.head
-            role_count[head] = role_count.get(head, 0) + 1
-        return role_count
-
-    def cluster_broadphase(self, other):
-        """
-        Simply compares the number of predicates of each type in the effects of
-        self and another action to make sure that they may be potentially
-        clustered. This is a very easy check before resorting to more complex
-        techniques.
-
-        Examples
-        --------
-        >>> from .strips import Object, Predicate, ROOT_TYPE
-        >>> P = Predicate("p", ROOT_TYPE)
-        >>> x, y, s, t, u = [Object(obj) for obj in "xystu"]
-        >>> a = Action("a", atoms=[
-        ...     LabeledAtom(P(x), section="add", certain=True),
-        ...     LabeledAtom(P(y), section="add", certain=False),
-        ...     LabeledAtom(P(s), section="del", certain=True),
-        ...     LabeledAtom(P(t), section="del", certain=True),
-        ...     LabeledAtom(P(u), section="del", certain=False)])
-        >>> b = Action("b", atoms=[
-        ...     LabeledAtom(P(x), section="add", certain=True),
-        ...     LabeledAtom(P(y), section="add", certain=True),
-        ...     LabeledAtom(P(t), section="del", certain=False),
-        ...     LabeledAtom(P(u), section="del", certain=False)])
-        >>> c = Action("c", atoms=[
-        ...     LabeledAtom(P(x), section="add", certain=True),
-        ...     LabeledAtom(P(y), section="add", certain=True),
-        ...     LabeledAtom(P(u), section="del", certain=False)])
-        >>> a.cluster_broadphase(b)
-        True
-        >>> a.cluster_broadphase(c)
-        False
-        >>> b.cluster_broadphase(c)
-        True
-        """
-        # TODO Which option is more appropriate? Leaving this functionality
-        # as a method of Action or putting it as a standalone function?
-        if not dict_leq(self.get_role_count(("add",),False), other.get_role_count(("add",))):
-            return False
-        if not dict_leq(self.get_role_count(("del",),False), other.get_role_count(("del",))):
-            return False
-        if not dict_leq(other.get_role_count(("add",),False), self.get_role_count(("add",))):
-            return False
-        if not dict_leq(other.get_role_count(("del",),False), self.get_role_count(("del",))):
-            return False
-        return True
 
     @staticmethod
     def from_strips(strips_action):

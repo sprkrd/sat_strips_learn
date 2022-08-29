@@ -31,20 +31,6 @@ class ActionCluster:
         return self.additional_info["right_parent"]
 
 
-class Variable:
-    def __init__(self, z3ref, *args):
-        self.z3ref = z3ref
-        self.args = args
-
-    @property
-    def prefix(self):
-        return self.args[0]
-
-    @property
-    def indices(self):
-        return self.args[1:]
-
-
 class VariableStorage:
     def __init__(self):
         self._storage = {}
@@ -53,13 +39,13 @@ class VariableStorage:
         return len(self._storage)
 
     def __iter__(self):
-        return iter(self._storage)
+        return iter(self._storage.items())
 
     def __call__(self, *args):
         var = self._storage.get(args)
         if var is None:
             varname = "_".join(map(str,args))
-            var = self._storage[args] = Variable(z3.Bool(varname), args)
+            var = self._storage[args] = z3.Bool(varname)
         return var
 
 
@@ -244,22 +230,15 @@ def cluster(left, right, timeout=None):
         z_1_i = varname("z", 1, i)
         variables[z_1_i] = Bool(z_1_i)
 
-    ###############
-    # CONSTRAINTS #
-    ###############
-
     # Cached data
+
+    varstg = VariableStorage()
 
     latom_left_potential_matches = [[] for _ in range(len(left.atoms))]
     latom_right_potential_matches = [[] for _ in range(len(left.atoms))]
 
     object_left_potential_matches = {o:set() for o in objects_left}
     object_right_potential_matches = {o:set() for o in objects_right}
-
-    hard_preserve_left = []
-    hard_preserve_right = []
-    soft_preserve_left = []
-    soft_preserve_right = []
 
     for section in ACTION_SECTIONS:
         p = product(grouped_latoms_left[section]. grouped_latoms_right[section])
@@ -272,18 +251,16 @@ def cluster(left, right, timeout=None):
                 object_left_potential_matches[o1].add(o2)
                 object_right_potential_matches[o2].add(o1)
 
-    for latom in left.atoms:
-        if
-
-
-
+    ###############
+    # CONSTRAINTS #
+    ###############
 
     hard_constraints = []
     soft_constraints = []
 
     # (H1) partial injective mapping
     for obj_l in objects_left:
-        hard_constraints += amo([variables[varname("x", obj_l, obj_r)]
+        hard_constraints += at_most_once([variables[varname("x", obj_l, obj_r)]
             for obj_r in objects_right])
     for obj_r in objects_right:
         hard_constraints += amo([variables[varname("x", obj_l, obj_r)]

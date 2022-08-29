@@ -313,10 +313,7 @@ class Atom:
         return self._data[1:]
 
     def get_signature(self):
-        return (self.head,) + tuple(arg.objtype for arg in self.args)
-
-    def is_compatible(self, other):
-        return self.head == other.head and self.arity() == other.arity()
+        return (self.head, self.arity())
 
     def arity(self):
         return len(self._data) - 1

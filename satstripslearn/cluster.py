@@ -3,7 +3,7 @@ import z3
 from itertools import product
 
 from .openworld import Action, ACTION_SECTIONS
-from .utils import dict_leq
+from .utils import dict_leq, Timer
 
 
 class ActionCluster:
@@ -95,7 +95,7 @@ def get_role_count(action, sections=None, include_uncertain=True):
         A (sub)set of ACTION_SECTIONS, the type(s) of the atom that this
         method should consider.
     include_uncertain : bool
-        Whether or not to count uncertain atoms.
+        Whether to count uncertain atoms.
 
     Returns
     -------
@@ -119,8 +119,8 @@ def broadphase_test(left, right):
 
     Examples
     --------
-    >>> from .openworld import wrap_predicate
-    >>> from .strips import Object, ROOT_TYPE
+    >>> from satstripslearn.openworld import wrap_predicate
+    >>> from satstripslearn.strips import Object, ROOT_TYPE
     >>> P = wrap_predicate("p", ROOT_TYPE)
     >>> x, y, s, t, u = [Object(obj) for obj in "xystu"]
     >>> a = Action("a", atoms=[
@@ -145,15 +145,13 @@ def broadphase_test(left, right):
     >>> broadphase_test(b, c)
     True
     """
-    # TODO Which option is more appropriate? Leaving this functionality
-    # as a method of Action or putting it as a standalone function?
-    if not dict_leq(left.get_role_count(("add",),False), right.get_role_count(("add",))):
+    if not dict_leq(get_role_count(left, ("add",),False), get_role_count(right, ("add",))):
         return False
-    if not dict_leq(left.get_role_count(("del",),False), right.get_role_count(("del",))):
+    if not dict_leq(get_role_count(left, ("del",),False), get_role_count(right, ("del",))):
         return False
-    if not dict_leq(left.get_role_count(("add",),False), right.get_role_count(("add",))):
+    if not dict_leq(get_role_count(left, ("add",),False), get_role_count(right, ("add",))):
         return False
-    if not dict_leq(left.get_role_count(("del",),False), right.get_role_count(("del",))):
+    if not dict_leq(get_role_count(left, ("del",),False), get_role_count(right, ("del",))):
         return False
     return True
 
@@ -165,89 +163,41 @@ def get_grouped_latoms(action):
     return result
 
 
-def cluster(left, right, timeout=None):
+def cluster(left_cluster, right_cluster, **kwargs):
+    left = left_cluster.action
+    right = right_cluster.action
+
+    timeout = kwargs.get("timeout")
+    amo_encoding = kwargs.get("amo_encoding", "quadratic")
+
     timer = Timer()
 
-    if not broadphase_test(right):
+    if not broadphase_test(left, right):
         return None
+
+    # Cached data
 
     objects_left = left.get_referenced_objects(as_list=True)
     objects_right = right.get_referenced_objects(as_list=True)
-    W_soft_preserve =  min(len(objects_left), len(objects_right)) + 1
+    w_soft_preserve = min(len(objects_left), len(objects_right)) + 1
 
     grouped_latoms_left = get_grouped_latoms(left)
     grouped_latoms_right = get_grouped_latoms(right)
 
-    #############
-    # VARIABLES #
-    #############
-
-    # It's not necessary to create all the variables beforehand, but's it's nice
-    # to have them indexed in a dict for reference. Maybe we will need this
-    # at some point?
-
-    variables = {} # index of variables
-
-    # some cached data for speeding up the generation of the constraints later.
-    latom_left_potential_matches = {}
-    latom_right_potential_matches = {}
-
-    hard_preserve_left = []
-    hard_preserve_right = []
-    soft_preserve_left = []
-    soft_preserve_right = []
-
-    # Create x variables (relations between objects in left and objects in right)
-    for obj_l, obj_r in product(objects_left, objects_right):
-        x_l_r = varname("x", obj_l, obj_r)
-        variables[x_l_r] = Bool(x_l_r)
-
-    # Create y variables (relations between latoms in left and latoms in right)
-    # and identify which latoms can be matched
-    for latom_type, latoms_left in grouped_latoms_left.items():
-        latoms_right = grouped_latoms_right[latom_type]
-        for (l,latom_left), (r,latom_right) in product(latoms_left, latoms_right):
-            if latom_left.head == latom_right.head:
-                latom_left_potential_matches.setdefault(l,[]).append(r)
-                latom_right_potential_matches.setdefault(r,[]).append(l)
-                y_l_r = varname("y", l, r)
-                variables[y_l_r] = Bool(y_l_r)
-
-    # Create z variables, which are preservation variables. Identify which are
-    # needed to be true, and which are needed to be false
-    for i, latom in enumerate(left.latoms):
-        if latom.latom_type == "pre" or not latom.certain:
-            soft_preserve_left.append(i)
-        else:
-            hard_preserve_left.append(i)
-        z_0_i = varname("z", 0, i)
-        variables[z_0_i] = Bool(z_0_i)
-    for i, latom in enumerate(right.latoms):
-        if latom.latom_type == "pre" or not latom.certain:
-            soft_preserve_right.append(i)
-        else:
-            hard_preserve_right.append(i)
-        z_1_i = varname("z", 1, i)
-        variables[z_1_i] = Bool(z_1_i)
-
-    # Cached data
-
-    varstg = VariableStorage()
-
     latom_left_potential_matches = [[] for _ in range(len(left.atoms))]
-    latom_right_potential_matches = [[] for _ in range(len(left.atoms))]
+    latom_right_potential_matches = [[] for _ in range(len(right.atoms))]
 
-    object_left_potential_matches = {o:set() for o in objects_left}
-    object_right_potential_matches = {o:set() for o in objects_right}
+    object_left_potential_matches = {o: set() for o in objects_left}
+    object_right_potential_matches = {o: set() for o in objects_right}
 
     for section in ACTION_SECTIONS:
-        p = product(grouped_latoms_left[section]. grouped_latoms_right[section])
-        for (idx1,latom1), (idx2,latom2) in p:
-            if latom1.atom.head != latom2.atom.head:
+        p = product(grouped_latoms_left[section], grouped_latoms_right[section])
+        for (l_idx, latom_l), (r_idx, latom_r) in p:
+            if latom_l.atom.get_signature() != latom_r.atom.get_signature():
                 break
-            latom_left_potential_matches[idx1].append(idx2)
-            latom_right_potential_matches[idx2].append(idx1)
-            for o1,o2 in zip(latom1.atom.args, latom2.atom.args):
+            latom_left_potential_matches[l_idx].append(r_idx)
+            latom_right_potential_matches[r_idx].append(l_idx)
+            for o1, o2 in zip(latom_l.atom.args, latom_r.atom.args):
                 object_left_potential_matches[o1].add(o2)
                 object_right_potential_matches[o2].add(o1)
 
@@ -255,66 +205,71 @@ def cluster(left, right, timeout=None):
     # CONSTRAINTS #
     ###############
 
+    varstg = VariableStorage()
+
     hard_constraints = []
     soft_constraints = []
 
     # (H1) partial injective mapping
-    for obj_l in objects_left:
-        hard_constraints += at_most_once([variables[varname("x", obj_l, obj_r)]
-            for obj_r in objects_right])
-    for obj_r in objects_right:
-        hard_constraints += amo([variables[varname("x", obj_l, obj_r)]
-            for obj_l in objects_left])
+    for obj_l, potential_matches in object_left_potential_matches.items():
+        hard_constraints += at_most_once([varstg("x", obj_l, obj_r) for obj_r in potential_matches], amo_encoding)
+    for obj_r, potential_matches in object_right_potential_matches.items():
+        hard_constraints += at_most_once([varstg("x", obj_l, obj_r) for obj_l in potential_matches], amo_encoding)
 
     # (H2) Features match iff arguments match
-    for l, potential_matches in latom_left_potential_matches.items():
-        for r in potential_matches:
-            latom_l = left.latoms[l]
-            latom_r = right.latoms[r]
-            lhs = variables[varname("y", l, r)]
+    for l_idx, potential_matches in enumerate(latom_left_potential_matches):
+        for r_idx in potential_matches:
+            latom_l = left.latoms[l_idx]
+            latom_r = right.latoms[r_idx]
+            lhs = varstg("y", l_idx, r_idx)
             rhs = []
             for obj_l, obj_r in zip(latom_l.arguments, latom_r.arguments):
-                rhs.append(variables[varname("x", obj_l, obj_r)])
-            rhs = And(*rhs)
+                rhs.append(varstg("x", obj_l, obj_r))
+            rhs = z3.And(*rhs)
             hard_constraints.append(lhs == rhs)
 
-    # (H3) A latom is preserved iff is matched with at least another latom
-    for l in range(len(left.latoms)):
-        lhs = variables[varname("z", 0, l)]
+    # (H3) A latom is preserved iff it matches at least another latom
+    for l_idx in range(len(left.latoms)):
+        lhs = varstg("z", "left", l_idx)
         rhs = []
-        for r in latom_left_potential_matches.get(l, []):
-            rhs.append(variables[varname("y", l, r)])
-        rhs = Or(*rhs)
+        for r_idx in latom_left_potential_matches[l_idx]:
+            rhs.append(varstg("y", l_idx, r_idx))
+        rhs = z3.Or(*rhs)
         hard_constraints.append(lhs == rhs)
-    for r in range(len(right.latoms)):
-        lhs = variables[varname("z", 1, r)]
+    for r_idx in range(len(right.latoms)):
+        lhs = varstg("z", "right", r_idx)
         rhs = []
-        for l in latom_right_potential_matches.get(r, []):
-            rhs.append(variables[varname("y", l, r)])
-        rhs = Or(*rhs)
+        for l_idx in latom_right_potential_matches[r_idx]:
+            rhs.append(varstg("y", l_idx, r_idx))
+        rhs = z3.Or(*rhs)
         hard_constraints.append(lhs == rhs)
 
     # (H4) All "sure" effects are preserved
-    for l in hard_preserve_left:
-        hard_constraints.append(variables[varname("z", 0, l)])
-    for r in hard_preserve_right:
-        hard_constraints.append(variables[varname("z", 1, r)])
+    for l_idx, latom in enumerate(left.atoms):
+        if latom.section != "pre" and latom.certain:
+            hard_constraints.append(varstg("z", "left", l_idx))
+    for r_idx, latom in enumerate(right.atoms):
+        if latom.section != "pre" and latom.certain:
+            hard_constraints.append(varstg("z", "right", r_idx))
 
     # (S1) Try not to match constants with different name (a.k.a. avoid lifting)
-    for obj_l, obj_r in product(objects_left, objects_right):
-        if not is_lifted(obj_l) and not is_lifted(obj_r) and obj_l!=obj_r:
-            soft_const = Not(variables[varname("x", obj_l, obj_r)])
-            soft_constraints.append( (1, soft_const) )
+    for obj_l, potential_matches in object_left_potential_matches.items():
+        for obj_r in potential_matches:
+            if not obj_l.is_variable() and not obj_r.is_variable() and obj_l != obj_r:
+                soft_const = z3.Not(varstg("x", obj_l, obj_r))
+                soft_constraints.append((1, soft_const))
 
     # (S2) Try to preserve predicates and uncertain effects
-    for l in soft_preserve_left:
-        soft_const = variables[varname("z", 0, l)]
-        soft_constraints.append( (W_soft_preserve, soft_const) )
-    for r in soft_preserve_right:
-        soft_const = variables[varname("z", 1, r)]
-        soft_constraints.append( (W_soft_preserve, soft_const) )
+    for l_idx, latom in enumerate(left.atoms):
+        if latom.section == "pre" or not latom.certain:
+            soft_const = varstg("z", "left", l_idx)
+            soft_constraints.append((w_soft_preserve, soft_const))
+    for l_idx, latom in enumerate(left.atoms):
+        if latom.section == "pre" or not latom.certain:
+            soft_const = varstg("z", "left", l_idx)
+            soft_constraints.append((w_soft_preserve, soft_const))
 
-    o = Optimize()
+    o = z3.Optimize()
     o.add(*hard_constraints)
     for weight, soft_const in soft_constraints:
         o.add_soft(soft_const, weight)
@@ -323,21 +278,20 @@ def cluster(left, right, timeout=None):
         o.set("timeout", timeout)
 
     result = o.check()
-    if result == unknown:
+    if result == z3.unknown:
         raise TimeoutError(f"timeout: {timeout}ms")
 
-    if result == unsat:
+    if result == z3.unsat:
         return None
 
     model = o.model()
-    objectives = o.objectives()[0]
-    dist = model.eval(o.objectives()[0]).as_long() / W_soft_preserve
-    if normalize_distance:
-        len_pre_left = len(grouped_latoms_left["pre"])
-        len_pre_right = len(grouped_latoms_right["pre"])
-        min_dist = abs(len_pre_left - len_pre_right)
-        max_dist = len_pre_left + len_pre_right + (W_soft_preserve-1)/W_soft_preserve
-        dist = (dist - min_dist) / max_dist
+    dist = model.eval(o.objectives()[0]).as_long() / w_soft_preserve
+
+    len_pre_left = len(grouped_latoms_left["pre"])
+    len_pre_right = len(grouped_latoms_right["pre"])
+    min_dist = abs(len_pre_left - len_pre_right)
+    max_dist = len_pre_left + len_pre_right + (w_soft_preserve-1)/w_soft_preserve
+    norm_dist = (dist - min_dist) / max_dist
 
     sigma_left = {}
     sigma_right = {}
@@ -356,14 +310,14 @@ def cluster(left, right, timeout=None):
             sigma_right[obj_r] = obj_u
 
     latoms_u = []
-    for l, latom_l in enumerate(left.latoms):
-        preserved_var = variables[varname("z", 0, l)]
+    for l_idx, latom_l in enumerate(left.latoms):
+        preserved_var = variables[varname("z", 0, l_idx)]
         if not model[preserved_var]:
             continue
-        for r in latom_left_potential_matches[l]:
-            related_var = variables[varname("y", l, r)]
+        for r_idx in latom_left_potential_matches[l_idx]:
+            related_var = variables[varname("y", l_idx, r_idx)]
             if model[related_var]:
-                latom_r = right.latoms[r]
+                latom_r = right.latoms[r_idx]
                 latom_u = latom_l.replace(sigma_left)
                 latom_u.certain = latom_l.certain or latom_r.certain
                 latoms_u.append(latom_u)

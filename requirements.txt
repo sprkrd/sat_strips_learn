@@ -1,13 +1,5 @@
 numpy
 matplotlib
-pillow
-gym
-imageio
-pyperplan
-networkx
 z3-solver
-jinja2
 graphviz
-ipython
-ipykernel
 tqdm

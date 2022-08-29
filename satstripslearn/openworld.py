@@ -160,8 +160,8 @@ class State:
         return self.atoms == other.atoms and self.uncertain_atoms == other.uncertain_atoms
 
     def __str__(self):
-        fst_part = ",".join(map(atom_to_str, self.atoms))
-        snd_part = ",".join(map(atom_to_str, self.uncertain_atoms))
+        fst_part = ",".join(map(str, self.atoms))
+        snd_part = ",".join(map(str, self.uncertain_atoms))
         return f"{{ {fst_part}; maybe {snd_part} }}"
 
 
@@ -237,6 +237,8 @@ class Action:
         sections : iterable or None
             A (sub)set of ACTION_SECTIONS, the type(s) of the features where this
             method must look into in the search for objects.
+        include_uncertain : bool
+            Whether to include uncertain LabeledAtom's
         as_list : bool
             Indicates whether to return the result as a list (True) or as a set (False)
 
@@ -249,7 +251,7 @@ class Action:
         objects = set()
         for atom in self.get_atoms_in_section(sections, include_uncertain):
             objects.update(atom.atom.args)
-        if not as_set:
+        if as_list:
             objects = list(objects)
         return objects
 
@@ -283,7 +285,7 @@ class Action:
 
         Examples
         --------
-        >>> from .strips import Predicate
+        >>> from satstripslearn.strips import Predicate
         >>> A, B, C, D, E, F = [Predicate(p) for p in "abcdef"]
         >>> s1 = State({A(), B()}, {C(), D(), E()})
         >>> s2 = State({A(), D(), F()}, {C(), E()})
@@ -298,7 +300,6 @@ class Action:
           del list = [(b), (c)?, (e)?]
         }
         """
-        name = name or action_id_gen()
         add_certain = s_next.difference(s)
         del_certain = s.difference(s_next)
         add_uncertain = s_next.difference(s, False)

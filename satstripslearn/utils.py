@@ -58,7 +58,7 @@ class Timer:
         self.start = (process_time(), time())
 
     def toc(self):
-        return (process_time()-self.start[0], time()-self.start[1])
+        return process_time() - self.start[0], time() - self.start[1]
 
 def lift_atom(atom, ref_dict):
     """

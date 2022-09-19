@@ -17,11 +17,6 @@ class SequentialIdGenerator:
         return f"{self._prefix}{next_id}"
 
 
-action_id_gen = SequentialIdGenerator("action-")
-variable_id_gen = SequentialIdGenerator("X")
-cluster_id_gen = SequentialIdGenerator("cluster-")
-
-
 def get_memory_usage():
     """Parses /proc/self/status to extract relevant memory figures.
 
@@ -59,23 +54,6 @@ class Timer:
 
     def toc(self):
         return process_time() - self.start[0], time() - self.start[1]
-
-def lift_atom(atom, ref_dict):
-    """
-    Substitutes every ground object in atom with a lifted object
-    with unique id.
-    """
-    head,*tail = atom
-    lifted_tail = []
-    for arg in tail:
-        if is_lifted(arg):
-            lifted_tail.append(arg)
-        else:
-            if arg not in ref_dict:
-                count = sum(obj.objtype == arg.objtype for obj in ref_dict)
-                ref_dict[arg] = arg.objtype.name + str(count)
-            lifted_tail.append(ref_dict[arg])
-    return (head,*lifted_tail)
 
 
 def inverse_map(d):

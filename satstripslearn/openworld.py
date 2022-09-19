@@ -1,5 +1,5 @@
 from .strips import Action as StripsAction, Predicate
-from .utils import dict_leq
+from .utils import SequentialIdGenerator, dict_leq
 
 
 ACTION_SECTIONS = ["pre", "add", "del"]
@@ -194,6 +194,8 @@ class Action:
         List of parameters of this action
     """
 
+    ACTION_ID_GEN = SequentialIdGenerator("action-")
+
     def __init__(self, name, parameters=None, atoms=None):
         """
         See help(type(self)).
@@ -268,7 +270,7 @@ class Action:
         return Action(name, parameters, atoms)
 
     @staticmethod
-    def from_transition(name, s, s_next, lifted=False):
+    def from_transition(s, s_next):
         """
         Static constructor that takes two states that are interpreted as successive
         and builds an action that describes the transition.
@@ -279,9 +281,6 @@ class Action:
             State before the transition
         s_next : State
             State after the transition
-        lifted : Bool
-            If True, then all the objects involved in the transition are lifted. That is,
-            the referenced objects are replaced by a lifted variable of the form ?x[id].
 
         Examples
         --------
@@ -300,6 +299,7 @@ class Action:
           del list = [(b), (c)?, (e)?]
         }
         """
+        name = Action.ACTION_ID_GEN()
         add_certain = s_next.difference(s)
         del_certain = s.difference(s_next)
         add_uncertain = s_next.difference(s, False)

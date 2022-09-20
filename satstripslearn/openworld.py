@@ -1,4 +1,4 @@
-from .strips import Action as StripsAction, Predicate
+from .strips import Action as StripsAction, Predicate, _typed_objlist_to_pddl
 from .utils import SequentialIdGenerator, dict_leq
 
 
@@ -71,8 +71,8 @@ class LabeledAtom:
         """
         return LabeledAtom(self.atom.replace(sigma), self.certain, self.section)
 
-    def to_str(self, show_section=True):
-        ret = self.atom.to_pddl(True)
+    def to_str(self, show_section=True, include_type=True):
+        ret = self.atom.to_pddl(include_type)
         if not self.certain:
             ret = ret + "?"
         if show_section:
@@ -204,6 +204,7 @@ class Action:
         self.atoms = atoms or []
         if parameters is None:
             self.parameters = [obj for obj in self.get_referenced_objects() if obj.is_variable()]
+            self.parameters.sort(key=lambda obj: (obj.objtype.name, obj.name))
         else:
             self.parameters = parameters
             self._verify()
@@ -321,10 +322,10 @@ class Action:
 
     def __str__(self):
         name = self.name
-        par_str = ", ".join(str(param) for param in self.parameters)
-        pre_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("pre"))
-        add_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("add"))
-        del_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("del"))
+        par_str = _typed_objlist_to_pddl(self.parameters)
+        pre_str = ", ".join(atom.to_str(False, False) for atom in self.get_atoms_in_section("pre"))
+        add_str = ", ".join(atom.to_str(False, False) for atom in self.get_atoms_in_section("add"))
+        del_str = ", ".join(atom.to_str(False, False) for atom in self.get_atoms_in_section("del"))
         return  "Action{\n"\
                f"  name = {name},\n"\
                f"  parameters = [{par_str}],\n"\
@@ -338,10 +339,10 @@ class Action:
 
     def to_latex(self):
         name = self.name
-        par_str = ", ".join(str(param) for param in self.parameters)
-        pre_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("pre"))
-        add_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("add"))
-        del_str = ", ".join(atom.to_str(False) for atom in self.get_atoms_in_section("del"))
+        par_str = _typed_objlist_to_pddl(self.parameters)
+        pre_str = ", ".join(atom.to_str(False, False) for atom in self.get_atoms_in_section("pre"))
+        add_str = ", ".join(atom.to_str(False, False) for atom in self.get_atoms_in_section("add"))
+        del_str = ", ".join(atom.to_str(False, False) for atom in self.get_atoms_in_section("del"))
         lines = [
                 r"\begin{flushleft}",
                 fr"\underline{{{name.capitalize()}({par_str}):}}\\",

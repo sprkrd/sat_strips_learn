@@ -1,19 +1,22 @@
-from threading import Lock
+# from threading import Lock
 from time import process_time, time
+
 
 class SequentialIdGenerator:
     def __init__(self, prefix="", state=0):
         self._count = state
         self._prefix = prefix
-        self._mtx = Lock()
+        # self._mtx = Lock()
 
     def get_state(self):
         return self._count
 
     def __call__(self):
-        with self._mtx:
-            next_id = self._count
-            self._count += 1
+        # with self._mtx:
+            # next_id = self._count
+            # self._count += 1
+        next_id = self._count
+        self._count += 1
         return f"{self._prefix}{next_id}"
 
 

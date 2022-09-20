@@ -4,7 +4,7 @@ from satstripslearn.openworld import Action as OpenWorldAction, LabeledAtom, wra
 from satstripslearn.strips import Action as StripsAction, ObjType, Predicate
 
 Agent = ObjType("agent")
-Location = ObjType("agent")
+Location = ObjType("location")
 
 _agent = Agent("?agent")
 _from = Location("?from")

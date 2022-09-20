@@ -33,7 +33,7 @@ class ObjType:
 
     def get_path_from_root(self):
         path = []
-        self = current
+        current = self
         while current is not None:
             path.append(current)
             current = current.parent

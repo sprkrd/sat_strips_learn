@@ -196,11 +196,14 @@ def draw_cluster_graph(top_actions, line_len=30, atom_limit_top=1000, atom_limit
     colors = action_color_dict(flat_actions) if highlight_last_actions else {}
     middle_actions = [act for act in flat_actions if act not in top_actions]
     g.attr("node", **ACTION_NODE_STYLE)
-    with g.subgraph(name="cluster_actionlib") as s:
-        s.attr(rank="same", label="<<b>Action library</b>>")
-        for action in top_actions:
-            draw_action_node(s, action, atom_limit=atom_limit_top, line_len=line_len,
-                    color=colors.get(action.name,"black"), highlight=highlight_top)
+    for action in top_actions:
+        draw_action_node(g, action, atom_limit=atom_limit_top, line_len=line_len,
+                color=colors.get(action.name,"black"), highlight=highlight_top)
+    # with g.subgraph(name="cluster_actionlib") as s:
+        # s.attr(rank="same", label="<<b>Action library</b>>")
+        # for action in top_actions:
+            # draw_action_node(s, action, atom_limit=atom_limit_top, line_len=line_len,
+                    # color=colors.get(action.name,"black"), highlight=highlight_top)
     for action in middle_actions:
         draw_action_node(g, action, atom_limit=atom_limit_middle,
                 color=colors.get(action.name,"black"), line_len=line_len)
@@ -245,16 +248,47 @@ def draw_coarse_cluster_graph(top_actions, highlight_top=True,
 
 if __name__ == "__main__":
     from .feature import Feature
-    action1 = Action("action-1", [Feature(("on", "x", "y"))])
-    action2 = Action("action-2", [])
-    action3 = Action("action-3", [])
-    action4 = Action("action-4", [])
-    action5 = Action("action-5", [])
-    action6 = Action("action-6", [])
-    cluster1 = ActionCluster(action1, action2, 0)
-    cluster2 = ActionCluster(action3, action4, 0)
-    action3.parent = cluster1
-    action5.parent = cluster2
-    actions = [action5, action6]
-    g = draw_cluster_graph(actions, highlight_last_actions=True)
-    g.render("g.gv", view=True, cleanup=True)
+
+    a1 = Action("move-odd-piece-right",
+            [
+                Feature(("at", "Token", "Source"), feature_type="pre"),
+                Feature(("odd", "Token"), feature_type="pre"),
+                Feature(("empty", "Destination"), feature_type="pre"),
+                Feature(("right", "Source", "Destination"), feature_type="pre"),
+                
+                Feature(("at", "Token", "Destination"), feature_type="add"),
+                Feature(("empty", "Source"), feature_type="add"),
+
+                Feature(("at", "Token", "Source"), feature_type="del"),
+                Feature(("empty", "Destination"), feature_type="del"),
+            ], parameters_in_canonical_order=["Token","Source","Destination"])
+    a2 = Action("move-even-piece-up",
+            [
+                Feature(("at", "Token", "Source"), feature_type="pre"),
+                Feature(("even", "Token"), feature_type="pre"),
+                Feature(("empty", "Destination"), feature_type="pre"),
+                Feature(("up", "Source", "Destination"), feature_type="pre"),
+                
+                Feature(("at", "Token", "Destination"), feature_type="add"),
+                Feature(("empty", "Source"), feature_type="add"),
+
+                Feature(("at", "Token", "Source"), feature_type="del"),
+                Feature(("empty", "Destination"), feature_type="del"),
+            ], parameters_in_canonical_order=["Token","Source","Destination"])
+
+    g = draw_cluster_graph([a1, a2], line_len=60, highlight_top=False, rankdir="LR")
+    g.render("example_split", view=True, cleanup=True)
+
+    # action1 = Action("action-1", [Feature(("on", "x", "y"))])
+    # action2 = Action("action-2", [])
+    # action3 = Action("action-3", [])
+    # action4 = Action("action-4", [])
+    # action5 = Action("action-5", [])
+    # action6 = Action("action-6", [])
+    # cluster1 = ActionCluster(action1, action2, 0)
+    # cluster2 = ActionCluster(action3, action4, 0)
+    # action3.parent = cluster1
+    # action5.parent = cluster2
+    # actions = [action5, action6]
+    # g = draw_cluster_graph(actions, highlight_last_actions=True)
+    # g.render("g.gv", view=True, cleanup=True)

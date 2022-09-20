@@ -3,6 +3,7 @@
 
 from .strips import Predicate, ObjType, ROOT_TYPE
 from .utils import get_memory_usage
+from .cluster import ActionCluster, cluster
 # from .oaru import OaruAlgorithm, STANDARD_FILTERS
 from .openworld import State, Action
 
@@ -56,7 +57,7 @@ s3 = State({
     Adjacent(loc_2_1, loc_1_1, up), Adjacent(loc_1_1, loc_2_1, down),
     At(robot, loc_2_1)})
 
-s3 = State({
+s4 = State({
     Adjacent(loc_1_1, loc_1_2, right), Adjacent(loc_1_2, loc_1_1, left),
     Adjacent(loc_1_2, loc_2_2, down), Adjacent(loc_2_2, loc_1_2, up),
     Adjacent(loc_2_2, loc_2_1, left), Adjacent(loc_2_1, loc_2_2, right),
@@ -78,11 +79,21 @@ def main():
 
     action0 = Action.from_transition(s0, s1)#.filter_features(0, take_min=False)
     action1 = Action.from_transition(s1, s2)#.filter_features(0, take_min=False)
-    action2 = Action.from_transition(s2, s1)#.filter_features(0, take_min=False)
-    action3 = Action.from_transition(s1, s0)#.filter_features(0, take_min=False)
+    action2 = Action.from_transition(s2, s3)#.filter_features(0, take_min=False)
+    action3 = Action.from_transition(s3, s4)#.filter_features(0, take_min=False)
     print(action0)
     print(action1)
-    # action_u1 = cluster(action0, action1, include_additional_info=True)
+    action_u1 = cluster(ActionCluster(action0), ActionCluster(action3))
+    print(action_u1.action)
+    action_u2 = cluster(action_u1, ActionCluster(action2))
+    print(action_u2.action)
+    action_u3 = cluster(action_u2, ActionCluster(action3))
+    print(action_u3.action)
+    # print(action_u1.action)
+    # print(action_u1.additional_info["number_of_variables"])
+    # print(action_u1.additional_info["elapsed_cpu_ms"])
+    # print(action_u1.additional_info["z3_stats"])
+    # print(get_memory_usage())
     # print(action_u1)
     # print(action_u1.parent.distance)
     # pprint(action_u1.parent.additional_info)

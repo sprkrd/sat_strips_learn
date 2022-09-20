@@ -3,7 +3,7 @@ import z3
 from itertools import product
 
 from .openworld import Action, ACTION_SECTIONS
-from .utils import dict_leq, Timer, SequentialIdGenerator
+from .utils import dict_leq, Timer, SequentialIdGenerator, try_parse_number
 
 
 CLUSTER_ID_GEN = SequentialIdGenerator("cluster-")
@@ -197,7 +197,7 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
         p = product(grouped_latoms_left[section], grouped_latoms_right[section])
         for (l_idx, latom_l), (r_idx, latom_r) in p:
             if latom_l.atom.get_signature() != latom_r.atom.get_signature():
-                break
+                continue
             latom_left_potential_matches[l_idx].append(r_idx)
             latom_right_potential_matches[r_idx].append(l_idx)
             for o1, o2 in zip(latom_l.atom.args, latom_r.atom.args):
@@ -226,8 +226,8 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
     # (H2) Features match iff arguments match
     for l_idx, potential_matches in enumerate(latom_left_potential_matches):
         for r_idx in potential_matches:
-            latom_l = left.latoms[l_idx]
-            latom_r = right.latoms[r_idx]
+            latom_l = left.atoms[l_idx]
+            latom_r = right.atoms[r_idx]
             lhs = y(l_idx, r_idx)
             rhs = []
             for obj_l, obj_r in zip(latom_l.atom.args, latom_r.atom.args):
@@ -236,14 +236,14 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
             hard_constraints.append(lhs == rhs)
 
     # (H3) A latom is preserved iff it matches at least another latom
-    for l_idx in range(len(left.latoms)):
+    for l_idx in range(len(left.atoms)):
         lhs = z("left", l_idx)
         rhs = []
         for r_idx in latom_left_potential_matches[l_idx]:
             rhs.append(y(l_idx, r_idx))
         rhs = z3.Or(*rhs)
         hard_constraints.append(lhs == rhs)
-    for r_idx in range(len(right.latoms)):
+    for r_idx in range(len(right.atoms)):
         lhs = z("right", r_idx)
         rhs = []
         for l_idx in latom_right_potential_matches[r_idx]:
@@ -295,8 +295,8 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
     if result == z3.unsat:
         return None
 
-    model = opt.model()
-    dist = model.eval(o.objectives()[0]).as_long() * norm_const
+    model = o.model()
+    dist = model.eval(o.objectives()[0]).as_long() / w_soft_preserve
 
     len_pre_left = len(grouped_latoms_left["pre"])
     len_pre_right = len(grouped_latoms_right["pre"])
@@ -314,7 +314,7 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
                 type_new_variable = obj_l.objtype.lca(obj_r.objtype)
                 index = varcount.get(type_new_variable, 0) + 1
                 varcount[type_new_variable] = index
-                varname = f"?{type_new_variable}{index}"
+                varname = f"?{type_new_variable.name}{index}"
                 obj_u = type_new_variable(varname)
             else:
                 obj_u = obj_l

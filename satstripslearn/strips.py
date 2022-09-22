@@ -196,6 +196,9 @@ class Object:
             ret += " - " + self.objtype.name
         return ret
 
+    def __lt__(self, other):
+        return self.name < other.name
+
     def __eq__(self, other):
         return self._data == other._data
 
@@ -490,11 +493,9 @@ class Action:
 
     def all_groundings(self, objects, state):
         if len(self._variables_in_preconditions()) == len(self.parameters):
-            print("Case #1")
             for sigma in self._all_groundings_aux1(state):
                 yield self.ground(*(sigma[param] for param in self.parameters))
         else:
-            print("Case #2")
             for sigma in self._all_groundings_aux1(state):
                 yield from self._all_groundings_aux2(objects, sigma)
 

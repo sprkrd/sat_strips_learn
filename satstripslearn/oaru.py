@@ -1,31 +1,22 @@
-from .cluster_z3 import cluster
-from .utils import inverse_map, Timer, atom_to_pddl
-from .action import Action
-from .feature_filter import ObjectGraphFilter, basic_object_filter
-from .viz import draw_cluster_graph, draw_coarse_cluster_graph
+from .cluster import cluster, ActionCluster
+from .utils import Timer
+from .openworld import Action
+# from .viz import draw_cluster_graph, draw_coarse_cluster_graph
 
 
-# STANDARD_FILTERS = [
-    # None,
-    # {"min_score": -1, "fn": max},
-    # {"min_score": -1, "fn": min},
-    # {"min_score": -1, "fn": sum},
-    # {"min_score": -0.5, "fn": lambda t: sum(t) / len(t) if t else 0},
-# ]
-
-STANDARD_FILTERS = [
-    None,
-    ObjectGraphFilter(1),
-    basic_object_filter,
-]
+def action_from_transition(s, s_next, latom_filter=None):
+    a = Action.from_transition(s, s_next)
+    if latom_filter is not None:
+        a = latom_filter(a)
+    return ActionCluster(a)
 
 
 def action_digest(a):
     count_certain = 0
     count_uncertain = 0
-    arity = len(a.get_parameters())
-    for f in a.features:
-        if f.certain:
+    arity = len(a.parameters)
+    for latom in a.atoms:
+        if latom.certain:
             count_certain += 1
         else:
             count_uncertain += 1
@@ -36,84 +27,68 @@ def check_updated(a0, a1):
     return action_digest(a0) != action_digest(a1)
 
 
+class Operation:
+    def __init__(self, op_num, op_id, op_info, wall_time, cpu_time, max_mem):
+        self.op_num = op_num
+        self.op_id = op_id
+        self.op_info = op_info
+        self.wall_time = wall_time
+        self.cpu_time = cpu_time
+        self.max_mem = max_mem
+    
+
 class OaruAlgorithm:
-    def __init__(self, action_library=None, filters=None, timeout=None, normalize_dist=False, double_filtering=False):
+    def __init__(self, action_library=None, double_filtering=False, **cluster_opts):
+        self.last_operation = None
         self.action_library = action_library or {}
-        self.filters = filters or [None]
-        self._current_filter_level = 0
-        self.timeout = timeout
-        self.normalize_dist = normalize_dist
-        self.double_filtering = double_filtering
-        self.wall_times = []
-        self.cpu_times = []
-        self.peak_z3_memory = 0
         self.negative_examples = []
+        self.double_filtering = double_filtering
+        self.cluster_opts = cluster_opts
 
-    def _action_from_transition(self, s, s_next, force_filter):
-        a = Action.from_transition(s, s_next)
-        feature_filter = force_filter or self.filters[self._current_filter_level]
-        if feature_filter is not None:
-            a = feature_filter(a)
-        return a
-
-    def _action_recognition(self, s, s_next, force_filter):
-        a = self._action_from_transition(s, s_next, force_filter)
-        replace_action = None
+    def action_recognition(self, s, s_next, latom_filter=None):
+        timer = Timer()
+        max_mem = 0
+        a = action_from_transition(s, s_next, latom_filter)
+        replaced_action = None
         found_u = None
         dist_found_u = float('inf')
         for a_lib in self.action_library.values():
-            a_u = cluster(a_lib, a, True, self.timeout, self.normalize_dist)
-            feature_filter = force_filter or self.filters[self._current_filter_level]
-            if a_u is not None and feature_filter is not None and self.double_filtering:
-                # a_u = a_u.filter_features(**feature_filter)
-                a_u = feature_filter(a_u)
-            dist_u = float('inf') if a_u is None else a_u.parent.distance
-            if dist_u < dist_found_u and not self._allows_negative_example(a_u):
-                additional_info = a_u.parent.additional_info
-                mem_z3 = additional_info["z3_stats"]["memory"]
-                self.peak_z3_memory = max(self.peak_z3_memory, mem_z3)
-                replace_action = a_lib
+            a_u = cluster(a_lib, a, **self.cluster_opts)
+            if a_u is not None and latom_filter and self.double_filtering:
+                a_u.action = feature_filter(a_u.action)
+            dist_u = float('inf') if a_u is None else a_u.distance
+            if dist_u < dist_found_u: #and not self._allows_negative_example(a_u.action):
+                mem_z3 = a_u.additional_info["z3_stats"]["memory"]
+                max_mem = max(max_mem, mem_z3)
+                replaced_action = a_lib
                 found_u = a_u
                 dist_found_u = dist_u
         updated = True
         if found_u is not None:
-            updated = check_updated(replace_action, found_u)
-            del self.action_library[replace_action.name]
-            additional_info = found_u.parent.additional_info
-            sigma = inverse_map(additional_info["sigma_right"])
-            a_g = found_u.replace_references(sigma)
-            self.action_library[found_u.name] = found_u
+            updated = check_updated(replaced_action.action, found_u.action)
+            if updated:
+                del self.action_library[replaced_action.action.name]
+                self.action_library[found_u.action.name] = found_u
+                sigma = found_u.additional_info["sigma_right"]
+                a_g = found_u.action.replace(sigma)
+            else:
+                sigma = found_u.additional_info["sigma_left"]
+                a_g = replaced_action.action.replace(sigma)
         else:
-            a_g = self.action_library[a.name] = a
-        return a_g, updated
+            self.action_library[a.action.name] = a
+            a_g = a.action
 
-    def increase_filter_level(self):
-        if self._current_filter_level < len(self.filters)-1:
-            self._current_filter_level += 1
-            filter_features = self.filters[self._current_filter_level]
-            action_library = [a.filter_features(**filter_features)
-                    for a in self.action_library.values()]
-            self.action_library = {a.name:a for a in action_library}
-            return True
-        return False
-
-    def action_recognition(self, s, s_next, logger=None, force_filter=None):
-        timer = Timer()
-        a_g, updated = None, None
-        while a_g is None:
-            try:
-                a_g, updated = self._action_recognition(s, s_next, force_filter)
-            except TimeoutError:
-                increased_lever = self.increase_filter_level()
-                if not increased_lever:
-                    self.timeout = None
-                    if logger:
-                        logger("Timeout! Cannot increase filter level further. No more timeouts.")
-                elif logger:
-                    logger(f"Timeout! Increased filter level to {self._current_filter_level}.")
         elapsed_cpu, elapsed_wall = timer.toc()
-        self.wall_times.append(round(elapsed_cpu*1000))
-        self.cpu_times.append(round(elapsed_wall*1000))
+
+        op_num = (self.last_operation.op_num+1) if self.last_operation else 0
+        op_id = "positive_example"
+        op_info = {
+            "updated": updated,
+            "schema": a_g.name if updated else found_u.action.name
+        }
+
+        self.last_operation = Operation(op_num, op_id, op_info, elapsed_wall, elapsed_cpu, max_mem)
+
         return a_g, updated
 
     def _refactor(self, action, neg_example):

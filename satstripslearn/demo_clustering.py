@@ -4,7 +4,8 @@
 from .strips import Predicate, ObjType, ROOT_TYPE
 from .utils import get_memory_usage
 from .cluster import ActionCluster, cluster
-# from .oaru import OaruAlgorithm, STANDARD_FILTERS
+from .latom_filter import basic_object_filter, ObjectGraphFilter
+from .oaru import OaruAlgorithm
 from .openworld import State, Action
 
 from pprint import pprint
@@ -66,29 +67,45 @@ s4 = State({
 
 
 def main():
-    # oaru = OaruAlgorithm(filters=STANDARD_FILTERS, timeout=1)
-    # print(oaru.action_recognition(s0, s1, logger=print))
-    # print(oaru.action_recognition(s1, s2, logger=print))
-    # print(oaru.action_recognition(s2, s1, logger=print))
-    # print(oaru.action_recognition(s1, s0, logger=print))
-    #
+    oaru = OaruAlgorithm()
+    print(oaru.action_recognition(s0, s1, basic_object_filter)[0])
+    print(oaru.action_recognition(s1, s2, basic_object_filter)[0])
+    print(oaru.action_recognition(s2, s1, basic_object_filter)[0])
+    print(oaru.action_recognition(s1, s0, basic_object_filter)[0])
+
+    for a in oaru.action_library.values():
+        print(a.action)
+    
     # print(oaru.wall_times)
     # print(oaru.cpu_times)
     # print(oaru.peak_z3_memory)
+    # z3_opts = {
+            # "amo_encoding": "pseudoboolean",
+            # "maxsat_engine": "wmax",
+            # "optsmt_engine": "symba",
+            # "timeout": 10
+    # }
+
+    # filt = ObjectGraphFilter(0, min)
+    # filt = basic_object_filter # ObjectGraphFilter(0, min)
 
 
-    action0 = Action.from_transition(s0, s1)#.filter_features(0, take_min=False)
-    action1 = Action.from_transition(s1, s2)#.filter_features(0, take_min=False)
-    action2 = Action.from_transition(s2, s3)#.filter_features(0, take_min=False)
-    action3 = Action.from_transition(s3, s4)#.filter_features(0, take_min=False)
-    print(action0)
-    print(action1)
-    action_u1 = cluster(ActionCluster(action0), ActionCluster(action3))
-    print(action_u1.action)
-    action_u2 = cluster(action_u1, ActionCluster(action2))
-    print(action_u2.action)
-    action_u3 = cluster(action_u2, ActionCluster(action3))
-    print(action_u3.action)
+    # action0 = filt(Action.from_transition(s0, s1))#.filter_features(0, take_min=False)
+    # action1 = filt(Action.from_transition(s1, s2))#.filter_features(0, take_min=False)
+    # action2 = filt(Action.from_transition(s2, s3))#.filter_features(0, take_min=False)
+    # action3 = filt(Action.from_transition(s3, s4))#.filter_features(0, take_min=False)
+    # print(action0)
+    # print(action1)
+    # action_u1 = cluster(ActionCluster(action0), ActionCluster(action3), **z3_opts)
+    # print(action_u1.action)
+    # action_u2 = cluster(action_u1, ActionCluster(action2), **z3_opts)
+    # print(action_u2.action)
+    # action_u3 = cluster(action_u2, ActionCluster(action3), **z3_opts)
+    # print(action_u3.action)
+
+
+
+
     # print(action_u1.action)
     # print(action_u1.additional_info["number_of_variables"])
     # print(action_u1.additional_info["elapsed_cpu_ms"])

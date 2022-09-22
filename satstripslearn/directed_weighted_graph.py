@@ -4,27 +4,24 @@ INF = 2147483647 # Just some big number
 
 class DirectedWeightedGraph:
 
-    def __init__(self, nodes, edges):
-        adjacency = {u:[] for u in nodes}
+    def __init__(self, nodes=None, edges=None):
+        self.nodes = nodes or set()
+        self.edges = edges or {}
+
+    def get_adjacency_list(self):
+        adjacency = {u:[] for u in self.nodes}
         for (u,v),w in edges.items():
             adjacency[u].append((v,w))
-        self._adjacency = adjacency
-
-    def get_nodes(self):
-        return list(self._adjacency.keys())
-
-    def get_edges(self):
-        edges = {}
-        for u,adjacent in self._adjacency.items():
-            for v,w in adjacent:
-                edges[(u,v)] = w
-        return edges
+        return adjacency
 
     def add_node(self, u):
-        self._adjacency.setdefault(u, [])
+        self.nodes.add(u)
 
     def add_edge(self, u, v, w):
-        self._adjacency[u].append((v,w))
+        self.nodes.add(u)
+        self.nodes.add(v)
+        old_weight = self.edges.get((u,v), INF)
+        self.edges[(u,v)] = min(old_weight, w)
 
     def dijkstra(self, start):
         distance = {u:INF for u in self._adjacency}
@@ -52,4 +49,3 @@ class DirectedWeightedGraph:
         for (u,v),w in self.get_edges().items():
             g.edge(u, v, label=str(w))
         return g
-

@@ -3,10 +3,7 @@ import z3
 from itertools import product
 
 from .openworld import Action, ACTION_SECTIONS
-from .utils import dict_leq, Timer, SequentialIdGenerator, try_parse_number, inverse_map
-
-
-CLUSTER_ID_GEN = SequentialIdGenerator("cluster-")
+from .utils import dict_leq, Timer, try_parse_number, inverse_map
 
 
 class ActionCluster:
@@ -346,7 +343,7 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
     additional_info["sigma_right"] = sigma_right
     additional_info["z3_stats"] = {k.replace(" ","_"): try_parse_number(v) for k,v in o.statistics()}
 
-    name = CLUSTER_ID_GEN()
+    name = Action.ACTION_ID_GEN()
     new_action = Action(name, atoms=latoms_u)
 
     return ActionCluster(new_action, additional_info)

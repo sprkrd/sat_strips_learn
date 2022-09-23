@@ -570,6 +570,9 @@ class Domain:
         self.types = types or []
         self.actions = actions or []
 
+    def copy(self):
+        return Domain(self.name, self.predicates.copy(), self.types.copy(), self.actions.copy())
+
     def declare_type(self, type_name, parent=None):
         parent = parent or ROOT_TYPE
         if type_name == ROOT_TYPE.name or any(type_name == type_.name for type_ in self.types):
@@ -647,6 +650,9 @@ class Problem:
         self.objects = objects or set()
         self.init = init or []
         self.goal = goal or []
+
+    def copy(self):
+        return Problem(self.name, self.domain.copy(), self.objects.copy(), self.init.copy(), self.goal.copy())
 
     def add_object(self, obj):
         if obj.is_variable():

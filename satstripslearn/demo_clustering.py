@@ -30,6 +30,8 @@ down = Direction("down")
 
 robot = Agent("robot")
 
+objects = [loc_1_1, loc_1_2, loc_2_1, loc_2_2, left, right, up, down, robot]
+
 s0 = State({
     Adjacent(loc_1_1, loc_1_2, right), Adjacent(loc_1_2, loc_1_1, left),
     Adjacent(loc_1_2, loc_2_2, down), Adjacent(loc_2_2, loc_1_2, up),
@@ -67,14 +69,18 @@ s4 = State({
 
 
 def main():
-    oaru = OaruAlgorithm()
+    oaru = OaruAlgorithm(constants=objects)
     print(oaru.action_recognition(s0, s1, basic_object_filter)[0])
-    print(oaru.action_recognition(s1, s2, basic_object_filter)[0])
-    print(oaru.action_recognition(s2, s1, basic_object_filter)[0])
-    print(oaru.action_recognition(s1, s0, basic_object_filter)[0])
+    # print(oaru.action_recognition(s1, s2, basic_object_filter)[0])
+    print(oaru.action_recognition(s2, s3, basic_object_filter)[0])
+    print(oaru.action_recognition(s3, s4, basic_object_filter)[0])
 
-    for a in oaru.action_library.values():
-        print(a.action)
+    oaru.draw_graph(".", view=True, coarse=False, highlight_last_actions=True)
+    oaru.add_negative_example(s1, s2)
+    oaru.draw_graph(".", view=True, coarse=False, highlight_last_actions=True)
+
+    # for a in oaru.action_library.values():
+        # print(a.action)
     
     # print(oaru.wall_times)
     # print(oaru.cpu_times)

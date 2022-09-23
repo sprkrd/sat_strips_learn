@@ -1,7 +1,7 @@
 from .cluster import cluster, ActionCluster
 from .utils import Timer
 from .openworld import Action
-# from .viz import draw_cluster_graph, draw_coarse_cluster_graph
+from .viz import draw_cluster_graph, draw_coarse_cluster_graph
 
 
 def action_from_transition(s, s_next, latom_filter=None):
@@ -38,12 +38,14 @@ class Operation:
     
 
 class OaruAlgorithm:
-    def __init__(self, action_library=None, double_filtering=False, **cluster_opts):
+    def __init__(self, action_library=None, double_filtering=False, cluster_opts=None, domain=None, constants=None):
         self.last_operation = None
+        self.domain = domain
+        self.constants = constants
         self.action_library = action_library or {}
         self.negative_examples = []
         self.double_filtering = double_filtering
-        self.cluster_opts = cluster_opts
+        self.cluster_opts = cluster_opts or {}
 
     def action_recognition(self, s, s_next, latom_filter=None):
         timer = Timer()
@@ -57,7 +59,7 @@ class OaruAlgorithm:
             if a_u is not None and latom_filter and self.double_filtering:
                 a_u.action = feature_filter(a_u.action)
             dist_u = float('inf') if a_u is None else a_u.distance
-            if dist_u < dist_found_u: #and not self._allows_negative_example(a_u.action):
+            if dist_u < dist_found_u and not self._allows_negative_example(a_u.action):
                 mem_z3 = a_u.additional_info["z3_stats"]["memory"]
                 max_mem = max(max_mem, mem_z3)
                 replaced_action = a_lib
@@ -66,14 +68,16 @@ class OaruAlgorithm:
         updated = True
         if found_u is not None:
             updated = check_updated(replaced_action.action, found_u.action)
-            if updated:
-                del self.action_library[replaced_action.action.name]
-                self.action_library[found_u.action.name] = found_u
-                sigma = found_u.additional_info["sigma_right"]
-                a_g = found_u.action.replace(sigma)
-            else:
-                sigma = found_u.additional_info["sigma_left"]
-                a_g = replaced_action.action.replace(sigma)
+            sigma = found_u.additional_info["sigma_right"]
+            # if updated:
+                # del self.action_library[replaced_action.action.name]
+                # self.action_library[found_u.action.name] = found_u
+                # a_g = found_u.action.replace(sigma)
+            # else:
+                # a_g = replaced_action.action.replace(sigma)
+            del self.action_library[replaced_action.action.name]
+            self.action_library[found_u.action.name] = found_u
+            a_g = found_u.action.replace(sigma)
         else:
             self.action_library[a.action.name] = a
             a_g = a.action
@@ -91,25 +95,32 @@ class OaruAlgorithm:
 
         return a_g, updated
 
+    def _can_produce_transition(self, a, s, s_next):
+        a = a.to_strips(False)
+        for a_g in a.all_groundings(self.constants, s.atoms):
+            if a_g.apply(s.atoms) == s_next.atoms:
+                return True
+        return False
+
     def _refactor(self, action, neg_example):
         unchecked_actions = [action]
         while unchecked_actions:
             unchecked_actions_next = []
             for a in unchecked_actions:
-                if a.can_produce_transition(*neg_example):
-                    assert a.parent is not None, "Cannot undo cluster!"
-                    parent_left = a.parent.left_parent
-                    parent_right = a.parent.right_parent
+                if self._can_produce_transition(a.action, *neg_example):
+                    assert not a.is_tga(), "Cannot undo TGA!"
+                    parent_left = a.left_parent
+                    parent_right = a.right_parent
                     unchecked_actions_next.append(parent_left)
                     unchecked_actions_next.append(parent_right)
-                    del self.action_library[a.name]
-                    self.action_library[parent_left.name] = parent_left
-                    self.action_library[parent_right.name] = parent_right
+                    del self.action_library[a.action.name]
+                    self.action_library[parent_left.action.name] = parent_left
+                    self.action_library[parent_right.action.name] = parent_right
             unchecked_actions = unchecked_actions_next
 
     def _allows_negative_example(self, action):
         for neg_example in self.negative_examples:
-            if action.can_produce_transition(*neg_example):
+            if self._can_produce_transition(action, *neg_example):
                 return True
         return False
 
@@ -118,21 +129,19 @@ class OaruAlgorithm:
         action_list = list(self.action_library.values())
         for i, action_1 in enumerate(action_list):
             for action_2 in action_list[i+1:]:
-                if (action_1,action_2) in already_checked or (action_2,action_1) in already_checked:
+                if (action_1,action_2) in already_checked in already_checked:
                     continue
                 already_checked.add((action_1, action_2))
-                a_u = cluster(action_1, action_2, False, self.timeout, self.normalize_dist)
-                if a_u is not None and not self._allows_negative_example(a_u):
-                    del self.action_library[action_1.name]
-                    del self.action_library[action_2.name]
+                already_checked.add((action_2, action_1))
+                a_u = cluster(action_1, action_2, **self.cluster_opts)
+                if a_u is not None and not self._allows_negative_example(a_u.action):
+                    del self.action_library[action_1.action.name]
+                    del self.action_library[action_2.action.name]
                     self.action_library[a_u.name] = a_u
                     return True, already_checked
         return False, already_checked
 
-
     def add_negative_example(self, pre_state, post_state):
-        assert not (pre_state.is_uncertain() or post_state.is_uncertain()), "This feature only works with fully observable states"
-
         neg_example = (pre_state, post_state)
         self.negative_examples.append(neg_example)
 
@@ -142,27 +151,6 @@ class OaruAlgorithm:
         merged, already_checked = self._remerge()
         while merged:
             merged, already_checked = self._remerge(already_checked)
-
-    def get_all_predicate_signatures(self):
-        predicate_signatures = set()
-        for action in self.action_library.values():
-            for feat in action.features:
-                predicate_signatures.add(feat.get_signature())
-        return predicate_signatures
-
-    def dump_pddl_domain(self, out, domain_name="oaru_domain"):
-        out.write(f"(define (domain {domain_name})\n\n")
-        out.write("(:requirements :strips)\n\n")
-        out.write("(:predicates\n")
-        for predicate_symbol, arity in self.get_all_predicate_signatures():
-            generic_predicate = (predicate_symbol,) + tuple(f"X{i}" for i in range(arity))
-            out.write(atom_to_pddl(generic_predicate))
-            out.write("\n")
-        out.write(")")
-        for action in self.action_library.values():
-            out.write("\n\n")
-            out.write(action.to_pddl())
-        out.write(f"\n)")
 
     def draw_graph(self, outdir, coarse=False, view=False, cleanup=True,
             filename="g.gv", format="pdf", **kwargs):

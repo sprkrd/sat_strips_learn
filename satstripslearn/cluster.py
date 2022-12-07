@@ -3,13 +3,10 @@ import z3
 from itertools import product
 
 from .openworld import Action, ACTION_SECTIONS
-from .utils import dict_leq, Timer, SequentialIdGenerator, try_parse_number
+from .utils import dict_leq, Timer, try_parse_number
 
 
-CLUSTER_ID_GEN = SequentialIdGenerator("cluster-")
-
-
-class ActionCluster:
+class Cluster:
     def __init__(self, action, additional_info=None):
         self.action = action
         self.additional_info = additional_info
@@ -117,9 +114,9 @@ def get_role_count(action, sections=None, include_uncertain=True):
 def broadphase_test(left, right):
     """
     Compares the number of predicates of each type in the effects of
-    self and another action to make sure that they may be potentially
-    clustered. This is a very easy check before resorting to more complex
-    techniques.
+    left and right to make sure that they have the potential to be
+    clustered. This is a very fast check before resorting to construct
+    the CSP.
 
     Examples
     --------
@@ -286,14 +283,14 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
     for key, value in options.items():
         o.set(k, v)
 
-    # Construct merged action from result
-
     result = o.check()
     if result == z3.unknown:
         raise TimeoutError()
 
     if result == z3.unsat:
         return None
+
+    # Construct merged action from result
 
     model = o.model()
     dist = model.eval(o.objectives()[0]).as_long() / w_soft_preserve
@@ -339,7 +336,6 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
     additional_info["tau"] = tau
     additional_info["z3_stats"] = {k.replace(" ","_"): try_parse_number(v) for k,v in o.statistics()}
 
-    name = CLUSTER_ID_GEN()
-    new_action = Action(name, atoms=latoms_u)
+    new_action = Action("newcluster", atoms=latoms_u)
 
-    return ActionCluster(new_action, additional_info)
+    return Cluster(new_action, additional_info)

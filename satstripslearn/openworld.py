@@ -334,8 +334,12 @@ class Action:
                f"  del list = [{del_str}]\n"\
                 "}"
 
+    def replace(self, sigma):
+        atoms = [latom.replace(sigma) for latom in self.atoms]
+        return Action(self.name, atoms=atoms)
+
     def __repr__(self):
-        return f"Action{{name={self.name}, {len(self.features)} features}}"
+        return f"Action{{name={self.name}, {len(self.atoms)} features}}"
 
     def to_latex(self):
         name = self.name

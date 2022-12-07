@@ -196,6 +196,9 @@ class Object:
             ret += " - " + self.objtype.name
         return ret
 
+    def __lt__(self, other):
+        return self.name < other.name
+
     def __eq__(self, other):
         return self._data == other._data
 
@@ -490,11 +493,9 @@ class Action:
 
     def all_groundings(self, objects, state):
         if len(self._variables_in_preconditions()) == len(self.parameters):
-            print("Case #1")
             for sigma in self._all_groundings_aux1(state):
                 yield self.ground(*(sigma[param] for param in self.parameters))
         else:
-            print("Case #2")
             for sigma in self._all_groundings_aux1(state):
                 yield from self._all_groundings_aux2(objects, sigma)
 
@@ -568,6 +569,9 @@ class Domain:
         self.predicates = predicates or []
         self.types = types or []
         self.actions = actions or []
+
+    def copy(self):
+        return Domain(self.name, self.predicates.copy(), self.types.copy(), self.actions.copy())
 
     def declare_type(self, type_name, parent=None):
         parent = parent or ROOT_TYPE
@@ -646,6 +650,9 @@ class Problem:
         self.objects = objects or set()
         self.init = init or []
         self.goal = goal or []
+
+    def copy(self):
+        return Problem(self.name, self.domain.copy(), self.objects.copy(), self.init.copy(), self.goal.copy())
 
     def add_object(self, obj):
         if obj.is_variable():

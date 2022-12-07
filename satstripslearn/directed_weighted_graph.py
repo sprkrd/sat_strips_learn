@@ -10,7 +10,7 @@ class DirectedWeightedGraph:
 
     def get_adjacency_list(self):
         adjacency = {u:[] for u in self.nodes}
-        for (u,v),w in edges.items():
+        for (u,v),w in self.edges.items():
             adjacency[u].append((v,w))
         return adjacency
 
@@ -24,7 +24,8 @@ class DirectedWeightedGraph:
         self.edges[(u,v)] = min(old_weight, w)
 
     def dijkstra(self, start):
-        distance = {u:INF for u in self._adjacency}
+        adjacency = self.get_adjacency_list()
+        distance = {u:INF for u in self.nodes}
         distance[start] = 0
         openset = [(0,start)]
         closedset = set()
@@ -34,7 +35,7 @@ class DirectedWeightedGraph:
                 # this is an outdated element in the heap
                 continue
             closedset.add(u)
-            for v, w in self._adjacency[u]:
+            for v, w in adjacency[u]:
                 dist_v = dist_u + w
                 if dist_v < distance[v]:
                     distance[v] = dist_v
@@ -44,8 +45,8 @@ class DirectedWeightedGraph:
     def dot(self):
         import graphviz as gv
         g = gv.Digraph()
-        for u in self._adjacency:
+        for u in self.nodes:
             g.node(u)
-        for (u,v),w in self.get_edges().items():
+        for (u,v),w in self.edges.items():
             g.edge(u, v, label=str(w))
         return g

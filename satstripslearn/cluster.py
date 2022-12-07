@@ -281,7 +281,7 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
         o.add_soft(soft_const, weight)
 
     for key, value in options.items():
-        o.set(k, v)
+        o.set(key, value)
 
     result = o.check()
     if result == z3.unknown:
@@ -303,6 +303,7 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
 
     tau = {}
     sigma_left = {}
+    sigma_right = {}
     varcount = {}
 
     for (obj_l, obj_r), var in x:
@@ -313,27 +314,33 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
                 varcount[type_new_variable] = index
                 varname = f"?{type_new_variable.name}{index}"
                 obj_u = type_new_variable(varname)
+                sigma_left[obj_u] = obj_l
+                sigma_right[obj_u] = obj_r
             else:
                 obj_u = obj_l
             tau[obj_l] = obj_r
-            sigma_left[obj_l] = obj_u
 
+    inv_sigma_left = inverse_map(sigma_left)
     latoms_u = []
     for (l_idx, r_idx), var in y:
         if model.eval(var, model_completion=True):
             certain = left.atoms[l_idx].certain or right.atoms[r_idx].certain
-            latom = left.atoms[l_idx].replace(sigma_left)
+            latom = left.atoms[l_idx].replace(inv_sigma_left)
             latom.certain = certain
             latoms_u.append(latom)
 
     additional_info = {}
     elapsed_cpu, elapsed_wall = timer.toc()
+    additional_info["distance"] = dist
+    additional_info["normalized_distance"] = norm_dist
     additional_info["left_parent"] = left_parent
     additional_info["right_parent"] = right_parent
     additional_info["elapsed_cpu_ms"] = round(elapsed_cpu*1000)
     additional_info["elapsed_wall_ms"] = round(elapsed_wall*1000)
     additional_info["number_of_variables"] = len(x) + len(y) + len(z)
     additional_info["tau"] = tau
+    additional_info["sigma_left"] = sigma_left
+    additional_info["sigma_right"] = sigma_right
     additional_info["z3_stats"] = {k.replace(" ","_"): try_parse_number(v) for k,v in o.statistics()}
 
     new_action = Action("newcluster", atoms=latoms_u)

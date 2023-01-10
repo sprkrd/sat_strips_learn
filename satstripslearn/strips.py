@@ -345,6 +345,9 @@ class Atom:
     def get_signature(self):
         return (self.head, self.arity())
 
+    def get_signature_str(self):
+        return "/".join(map(str,self.get_signature()))
+
     def arity(self):
         return len(self._data) - 1
 
@@ -433,6 +436,12 @@ def _match_unify(refatom, atom, sigma=None):
     return sigma
 
 
+class Context:
+    def __init__(self, objects, atoms):
+        self.objects = objects
+        self.atoms = atoms
+
+
 class Action:
 
     def __init__(self, name, parameters=None, precondition=None, add_list=None, del_list=None):
@@ -442,6 +451,7 @@ class Action:
         self.add_list = add_list or []
         self.del_list = del_list or []
         self._verify()
+        self._has_free_parameters = len(self._variables_in_precondition()) < len(self.parameters)
 
     def _verify(self):
         for param in self.parameters:
@@ -454,6 +464,9 @@ class Action:
 
     def get_signature(self):
         return (self.name,) + tuple(param.objtype for param in self.parameters)
+
+    def get_signature_str(self):
+        return "/".join(map(str,self.get_signature()))
 
     def arity(self):
         return len(self.parameters)
@@ -518,13 +531,13 @@ class Action:
                             sigma_new[param] = obj
                             stack.append((param_idx+1,sigma_new))
 
-    def all_groundings(self, objects, state):
-        if len(self._variables_in_preconditions()) == len(self.parameters):
-            for sigma in self._all_groundings_aux1(state):
-                yield self.ground(*(sigma[param] for param in self.parameters))
+    def all_groundings(self, ctx):
+        if self._has_free_parameters:
+            for sigma in self._all_groundings_aux1(ctx.atoms):
+                yield from self._all_groundings_aux2(ctx.objects, sigma)
         else:
-            for sigma in self._all_groundings_aux1(state):
-                yield from self._all_groundings_aux2(objects, sigma)
+            for sigma in self._all_groundings_aux1(ctx.atoms):
+                yield self.ground(*(sigma[param] for param in self.parameters))
 
     def ground(self, *parameters):
         if len(parameters) != self.arity():
@@ -562,25 +575,24 @@ class Action:
 
 
 class GroundedAction:
-
     def __init__(self, schema, parameters):
         self.schema = schema
         self.parameters = parameters
         self.sigma = dict(zip(schema.parameters, parameters))
 
-    def is_applicable(self, state):
+    def is_applicable(self, ctx):
         precondition = self.schema.precondition
-        return all(atom.replace(self.sigma) in state for atom in precondition)
+        return all(atom.replace(self.sigma) in ctx.atoms for atom in precondition)
 
-    def apply(self, state):
-        next_state = None
-        if self.is_applicable(state):
-            next_state = state.copy()
-            for atom in self.schema.add_list:
-                next_state.add(atom.replace(self.sigma))
-            for atom in self.schema.del_list:
-                next_state.discard(atom.replace(self.sigma))
-        return next_state
+    def apply(self, ctx):
+        if not self.is_applicable(ctx):
+            return None
+        updated_atoms = ctx.atoms.copy()
+        for atom in self.schema.add_list:
+            updated_atoms.add(atom.replace(self.sigma))
+        for atom in self.schema.del_list:
+            updated_atoms.discard(atom.replace(self.sigma))
+        return Context(ctx.objects, updated_atoms)
 
     def __str__(self):
         return self.schema.name + "(" + ",".join(obj.name for obj in self.parameters) + ")"
@@ -601,22 +613,13 @@ class Domain:
         return Domain(self.name, self.predicates.copy(), self.types.copy(), self.actions.copy())
 
     def declare_type(self, type_name, parent=None):
-        parent = parent or ROOT_TYPE
-        if type_name == ROOT_TYPE.name or any(type_name == type_.name for type_ in self.types):
-            raise ValueError(f"Type with name {type_name} already declared")
-        if parent is not ROOT_TYPE and parent not in self.types:
-            raise ValueError(f"Parent type {parent} not declared")
-        type_ = ObjType(type_name, parent)
-        self.types.append(type_)
+        type_ = ObjType(type_name, parent or ROOT_TYPE)
+        self.add_type(type_)
         return type_
 
     def declare_predicate(self, head, *parameter_types):
-        if any(head == pred.head  for pred in self.predicates):
-            raise ValueError(f"Predicate with name {head} already declared")
-        if not all(type_ == ROOT_TYPE or type_ in self.types for type_ in parameter_types):
-            raise ValueError("Type has not been declared")
         predicate = Predicate(head, *parameter_types)
-        self.predicates.append(predicate)
+        self.add_predicate(predicate)
         return predicate
 
     def declare_action(self, name, params, pre, add_list, del_list):
@@ -624,9 +627,30 @@ class Domain:
         self.add_action(action)
         return action
 
+    def add_type(self, type_):
+        self._verify_type(type_)
+        self.types.append(type_)
+
+    def add_predicate(self, predicate):
+        self._verify_predicate(predicate)
+        self.predicates.append(predicate)
+
     def add_action(self, action):
         self._verify_action(action)
         self.actions.append(action)
+
+    def _verify_type(self, type_):
+        parent = parent or ROOT_TYPE
+        if type_.name == ROOT_TYPE.name or any(type_.name == other.name for other in self.types):
+            raise ValueError(f"Type with name {type_.name} already declared")
+        if type_.parent is not ROOT_TYPE and parent not in self.types:
+            raise ValueError(f"Parent type {type_.parent} not declared")
+
+    def _verify_predicate(self, predicate):
+        if any(predicate.head == other.head for other in self.predicates):
+            raise ValueError(f"Predicate with name {predicate.head} already declared")
+        if not all(type_ == ROOT_TYPE or type_ in self.types for type_ in predicate.argtypes):
+            raise ValueError
 
     def _verify_action(self, action):
         if any(action.name == other.name for other in self.actions):
@@ -675,8 +699,8 @@ class Problem:
         self.name = name
         self.domain = domain
         self.objects = objects or set()
-        self.init = init or []
-        self.goal = goal or []
+        self.init = init or set()
+        self.goal = goal or set()
 
     def copy(self):
         return Problem(self.name, self.domain.copy(), self.objects.copy(), self.init.copy(), self.goal.copy())
@@ -691,14 +715,19 @@ class Problem:
             raise ValueError("Cannot add atoms with free variables to init section")
         if not all(arg in self.objects for arg in atom.args):
             raise ValueError("All the objects must be in the object list")
+        if not any(pred.has_generated(atom) for pred in self.domain.predicates):
+            raise ValueError(f"The domain does not contain any predicate with the signature {atom.get_signature_str()}")
 
     def add_init_atom(self, atom):
         self._check_atom(atom)
-        self.init.append(atom)
+        self.init.add(atom)
 
     def add_goal_atom(self, atom):
         self._check_atom(atom)
-        self.goal.append(atom)
+        self.goal.add(atom)
+
+    def get_initial_state(self):
+        return Context(self.objects, self.init)
 
     def dump_pddl(self, out):
         typing = self.domain.types is not None

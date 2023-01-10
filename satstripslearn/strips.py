@@ -3,9 +3,9 @@ from itertools import chain
 
 
 class ObjType:
-    """An object type, as those used in PDDL to narrow down the sets of objects
-    that can be used for predicate or action's arguments. This class allows
-    to establush hierarchies of types.
+    """An object type, as those used in PDDL to narrow down the
+    sets of objects that can be used for predicate or action's
+    arguments. This class allows to establish hierarchies of types.
 
     Parameters
     ----------
@@ -32,6 +32,16 @@ class ObjType:
         self.parent = parent
 
     def get_path_from_root(self):
+        """
+        Obtains the types from the root type to self.
+        The method considers the root type the ascendant
+        whose parent is None.
+
+        Returns
+        -------
+        A list with all the types. The types are sorted from root to
+        the current type.
+        """
         path = []
         current = self
         while current is not None:
@@ -40,7 +50,24 @@ class ObjType:
         path.reverse()
         return path
 
-    def lca(self, other):
+    def lowest_common_ancestor(self, other):
+        """
+        Finds the lowest common ancestor of the current ObjType
+        with another ObjType (i.e. the deepest ancestor shared by
+        both types).
+
+        Parameters
+        ----------
+        other : ObjType
+            The other ObjType to look for the lowest common
+            ancestor.
+
+        Returns
+        -------
+        An ObjType: the lowest common ancestor of this ObjType
+        and other or None, if there are no common ancestors (i.e.
+        the type hierarchies are independent).
+        """
         path_to_self = self.get_path_from_root()
         path_to_other = other.get_path_from_root()
         lca = None

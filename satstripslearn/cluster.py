@@ -177,9 +177,6 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
 
     objects_left = left.get_referenced_objects(as_list=True)
     objects_right = right.get_referenced_objects(as_list=True)
-    num_constants_left = sum(not obj.is_variable() for obj in objects_left)
-    num_constants_right = sum(not obj.is_variable() for obj in objects_right)
-    w_soft_preserve = min(num_constants_left, num_constants_right) + 1
 
     grouped_latoms_left = get_grouped_latoms(left)
     grouped_latoms_right = get_grouped_latoms(right)
@@ -264,6 +261,9 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
                 soft_constraints.append((1, soft_const))
 
     # (S2) Try to preserve predicates and uncertain effects
+    num_constants_left = sum(not obj.is_variable() for obj in objects_left)
+    num_constants_right = sum(not obj.is_variable() for obj in objects_right)
+    w_soft_preserve = min(num_constants_left, num_constants_right) + 1
     for l_idx, latom in enumerate(left.atoms):
         if latom.section == "pre" or not latom.certain:
             soft_const = z("left", l_idx)
@@ -309,7 +309,8 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
     for (obj_l, obj_r), var in x:
         if model.eval(var, model_completion=True):
             if obj_l.is_variable() or obj_r.is_variable() or obj_l != obj_r:
-                type_new_variable = obj_l.objtype.lca(obj_r.objtype)
+                type_new_variable = obj_l.objtype.lowest_common_ancestor(
+                        obj_r.objtype)
                 index = varcount.get(type_new_variable, 0) + 1
                 varcount[type_new_variable] = index
                 varname = f"?{type_new_variable.name}{index}"

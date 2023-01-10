@@ -1,4 +1,4 @@
-from .cluster import cluster, ActionCluster
+from .cluster import cluster, Cluster
 from .utils import Timer
 from .openworld import Action
 from .viz import draw_cluster_graph, draw_coarse_cluster_graph
@@ -8,7 +8,7 @@ def action_from_transition(s, s_next, latom_filter=None):
     a = Action.from_transition(s, s_next)
     if latom_filter is not None:
         a = latom_filter(a)
-    return ActionCluster(a)
+    return Cluster(a)
 
 
 def action_digest(a):
@@ -28,20 +28,17 @@ def check_updated(a0, a1):
 
 
 class Operation:
-    def __init__(self, op_num, op_id, op_info, wall_time, cpu_time, max_mem):
-        self.op_num = op_num
-        self.op_id = op_id
-        self.op_info = op_info
+    def __init__(self, added, removed, description, wall_time, cpu_time, max_mem):
+        self.added = added
+        self.removed = removed
+        self.description = description
         self.wall_time = wall_time
         self.cpu_time = cpu_time
         self.max_mem = max_mem
-    
+
 
 class OaruAlgorithm:
-    def __init__(self, action_library=None, double_filtering=False, cluster_opts=None, domain=None, constants=None):
-        self.last_operation = None
-        self.domain = domain
-        self.constants = constants
+    def __init__(self, action_library=None, double_filtering=False, cluster_opts=None):
         self.action_library = action_library or {}
         self.negative_examples = []
         self.double_filtering = double_filtering

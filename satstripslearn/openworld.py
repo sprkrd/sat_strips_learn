@@ -1,3 +1,5 @@
+from itertools import chain
+
 from .strips import Action as StripsAction, Predicate, _typed_objlist_to_pddl
 from .utils import SequentialIdGenerator, dict_leq
 
@@ -113,12 +115,17 @@ class State:
         The caller is responsible to enforce this.
     """
 
-    def __init__(self, atoms, uncertain_atoms=None):
+    def __init__(self, atoms, uncertain_atoms=None, objects=None):
         """
         See help(type(self)).
         """
         self.atoms = atoms
         self.uncertain_atoms = uncertain_atoms or set()
+        if objects is None:
+            objects = set()
+            for atom in chain(atoms, self.uncertain_atoms):
+                objects.update(atom.args)
+        self.objects = objects
 
     def difference(self, other, certain=True):
         """

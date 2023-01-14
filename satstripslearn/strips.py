@@ -441,6 +441,9 @@ class Context:
         self.objects = objects
         self.atoms = atoms
 
+    def __str__(self):
+        return " ".join(sorted(map(str, self.atoms)))
+
 
 class Action:
 
@@ -451,7 +454,7 @@ class Action:
         self.add_list = add_list or []
         self.del_list = del_list or []
         self._verify()
-        self._has_free_parameters = len(self._variables_in_precondition()) < len(self.parameters)
+        self._has_free_parameters = len(self._deduced_parameters()) < len(self.parameters)
 
     def _verify(self):
         for param in self.parameters:
@@ -488,7 +491,7 @@ class Action:
     #         elif atom in state:
     #             stack.append((idx+1, sigma))
 
-    def _variables_in_preconditions(self):
+    def _deduced_parameters(self):
         variables = set()
         for atom in self.precondition:
             variables.update(arg for arg in atom.args if arg.is_variable())
@@ -640,7 +643,6 @@ class Domain:
         self.actions.append(action)
 
     def _verify_type(self, type_):
-        parent = parent or ROOT_TYPE
         if type_.name == ROOT_TYPE.name or any(type_.name == other.name for other in self.types):
             raise ValueError(f"Type with name {type_.name} already declared")
         if type_.parent is not ROOT_TYPE and parent not in self.types:
@@ -708,7 +710,8 @@ class Problem:
     def add_object(self, obj):
         if obj.is_variable():
             raise ValueError("Cannot add variable to object list")
-        self.objects.append(obj)
+        self.objects.add(obj)
+        return obj
 
     def _check_atom(self, atom):
         if atom.is_lifted():
@@ -721,13 +724,15 @@ class Problem:
     def add_init_atom(self, atom):
         self._check_atom(atom)
         self.init.add(atom)
+        return atom
 
     def add_goal_atom(self, atom):
         self._check_atom(atom)
         self.goal.add(atom)
+        return atom
 
     def get_initial_state(self):
-        return Context(self.objects, self.init)
+        return Context(list(self.objects), self.init)
 
     def dump_pddl(self, out):
         typing = self.domain.types is not None

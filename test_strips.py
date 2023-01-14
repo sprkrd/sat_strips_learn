@@ -2,55 +2,48 @@
 
 from satstripslearn.strips import *
 
-
-dom = Domain("hey")
+dom = Domain("visitall")
 
 Agent = dom.declare_type("agent")
 Location = dom.declare_type("location")
+
+At = dom.declare_predicate("at", Agent, Location)
+Adjacent = dom.declare_predicate("adjacent", Location, Location)
 
 _agent = Agent("?agent")
 _from = Location("?from")
 _to = Location("?to")
 
-robot = Agent("robot")
-src = Location("src")
-dst = Location("dst")
-
-a1 = Location("a1")
-a2 = Location("a2")
-b1 = Location("b1")
-b2 = Location("b2")
-
-At = dom.declare_predicate("at", Agent, Location)
-Adjacent = dom.declare_predicate("adjacent", Location, Location)
-
-Move = dom.declare_action("move", [_agent, _from, _to],
-    [At(_agent, _from), Adjacent(_from, _to)],
-    [At(_agent, _to)],
-    [At(_agent, _from)]
+Move = dom.declare_action("move",               # Action name
+    [_agent, _from, _to],                       # Parameters
+    [At(_agent, _from), Adjacent(_from, _to)],  # Precondition
+    [At(_agent, _to)],                          # Add list
+    [At(_agent, _from)]                         # Delete list
 )
 
-state = {At(robot, a1),
-         Adjacent(a1, a2),
-         Adjacent(a2, a1),
-         Adjacent(a1, b1),
-         Adjacent(b1, a1),
-         Adjacent(b1, b2),
-         Adjacent(b2, b1),
-         Adjacent(a2, b2),
-         Adjacent(b2, a2)
-}
+prob = Problem("myproblem", dom)
 
-objects = [robot, a1, a2, b1, b2]
+a1 = prob.add_object(Location("a1"))
+a2 = prob.add_object(Location("a2"))
+b1 = prob.add_object(Location("b1"))
+b2 = prob.add_object(Location("b2"))
+robot = prob.add_object(Agent("robot"))
 
-groundings = list(Move.all_groundings(objects, state))
+prob.add_init_atom(At(robot,a1))
+prob.add_init_atom(Adjacent(a1, a2))
+prob.add_init_atom(Adjacent(a1, b1))
+prob.add_init_atom(Adjacent(b1, a1))
+prob.add_init_atom(Adjacent(b1, b2))
+prob.add_init_atom(Adjacent(a2, a1))
+prob.add_init_atom(Adjacent(a2, b2))
+prob.add_init_atom(Adjacent(b2, a2))
+prob.add_init_atom(Adjacent(b2, b1))
 
-print(groundings[0].apply(state))
+ctx = prob.get_initial_state()
+
+groundings = list(Move.all_groundings(ctx))
 
 print(groundings)
-
+print(groundings[0].apply(ctx))
 print(dom)
-
-problem = Problem("myproblem", dom, set(objects), list(state), [At(robot, b2)])
-
-print(problem)
+print(prob)

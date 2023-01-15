@@ -3,6 +3,14 @@
 
 ## Preparation steps
 
+### Master branch
+
+Instructions coming soon.
+
+### AAAI 2021 branch
+
+This branch contains the experiments for the Online Action Recognition paper, published
+in AAAI 2021.
 
 This project uses pddlgym as a submodule. To clone, use
 

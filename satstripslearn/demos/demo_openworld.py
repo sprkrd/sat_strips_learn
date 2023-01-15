@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
-
-from satstripslearn.openworld import Action as OpenWorldAction, LabeledAtom, wrap_predicate
-from satstripslearn.strips import Action as StripsAction, ObjType, Predicate
+from ..openworld import Action as OpenWorldAction, LabeledAtom, wrap_predicate
+from ..strips import Action as StripsAction, ObjType, Predicate
 
 Agent = ObjType("agent")
 Location = ObjType("location")

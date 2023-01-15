@@ -1,25 +1,6 @@
 # from threading import Lock
 from time import process_time, time
 
-
-class SequentialIdGenerator:
-    def __init__(self, prefix="", state=0):
-        self._count = state
-        self._prefix = prefix
-        # self._mtx = Lock()
-
-    def get_state(self):
-        return self._count
-
-    def __call__(self):
-        # with self._mtx:
-            # next_id = self._count
-            # self._count += 1
-        next_id = self._count
-        self._count += 1
-        return f"{self._prefix}{next_id}"
-
-
 def get_memory_usage():
     """Parses /proc/self/status to extract relevant memory figures.
 
@@ -69,8 +50,3 @@ def dict_leq(d1, d2):
         if v > d2.get(k, 0):
             return False
     return True
-
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()

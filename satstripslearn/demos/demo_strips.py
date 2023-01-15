@@ -1,6 +1,4 @@
-#!/usr/bin/env python3
-
-from satstripslearn.strips import *
+from ..strips import *
 
 dom = Domain("visitall")
 

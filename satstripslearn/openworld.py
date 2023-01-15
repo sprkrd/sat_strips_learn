@@ -1,7 +1,7 @@
 from itertools import chain
 
 from .strips import Action as StripsAction, Predicate, _typed_objlist_to_pddl
-from .utils import SequentialIdGenerator, dict_leq
+from .utils import dict_leq
 
 
 ACTION_SECTIONS = ["pre", "add", "del"]
@@ -96,7 +96,7 @@ def wrap_predicate(head, *args):
     return f
 
 
-class State:
+class Context:
     """
     Represents a symbolic state, that is, a collection of atomic facts
     (instantiated predicates) that describe the world. Partially observability
@@ -115,17 +115,13 @@ class State:
         The caller is responsible to enforce this.
     """
 
-    def __init__(self, atoms, uncertain_atoms=None, objects=None):
+    def __init__(self, objects, atoms, uncertain_atoms=None):
         """
         See help(type(self)).
         """
+        self.objects = objects
         self.atoms = atoms
         self.uncertain_atoms = uncertain_atoms or set()
-        if objects is None:
-            objects = set()
-            for atom in chain(atoms, self.uncertain_atoms):
-                objects.update(atom.args)
-        self.objects = objects
 
     def difference(self, other, certain=True):
         """
@@ -138,7 +134,7 @@ class State:
 
         Parameters
         ----------
-        other : State
+        other : Context
             state that is compared to self
         certain : Bool
             if true, only the certain additions are returned, otherwise, only
@@ -159,10 +155,10 @@ class State:
         return bool(self.uncertain_atoms)
 
     def copy(self):
-        return State(self.atoms.copy(), self.uncertain_atoms.copy())
+        return Context(self.atoms.copy(), self.uncertain_atoms.copy())
 
     def __eq__(self, other):
-        if not isinstance(other, State):
+        if not isinstance(other, Context):
             return NotImplemented
         return self.atoms == other.atoms and self.uncertain_atoms == other.uncertain_atoms
 
@@ -200,9 +196,6 @@ class Action:
     parameters : list
         List of parameters of this action
     """
-
-    ACTION_ID_GEN = SequentialIdGenerator("action-")
-
     def __init__(self, name, parameters=None, atoms=None):
         """
         See help(type(self)).
@@ -278,24 +271,24 @@ class Action:
         return Action(name, parameters, atoms)
 
     @staticmethod
-    def from_transition(s, s_next):
+    def from_transition(s, s_next, name="unnamed"):
         """
         Static constructor that takes two states that are interpreted as successive
         and builds an action that describes the transition.
 
         Parameters
         ----------
-        s : State
-            State before the transition
-        s_next : State
-            State after the transition
+        s : Context
+            Context before the transition
+        s_next : Context
+            Context after the transition
 
         Examples
         --------
         >>> from satstripslearn.strips import Predicate
         >>> A, B, C, D, E, F = [Predicate(p) for p in "abcdef"]
-        >>> s1 = State({A(), B()}, {C(), D(), E()})
-        >>> s2 = State({A(), D(), F()}, {C(), E()})
+        >>> s1 = Context({A(), B()}, {C(), D(), E()})
+        >>> s2 = Context({A(), D(), F()}, {C(), E()})
         >>> action = Action.from_transition("a", s1, s2)
         >>> action.atoms.sort(key=lambda atom: atom.atom.head)
         >>> print(action)
@@ -307,7 +300,6 @@ class Action:
           del list = [(b), (c)?, (e)?]
         }
         """
-        name = Action.ACTION_ID_GEN()
         add_certain = s_next.difference(s)
         del_certain = s.difference(s_next)
         add_uncertain = s_next.difference(s, False)

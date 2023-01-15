@@ -4,18 +4,16 @@ from .openworld import Action
 from .directed_weighted_graph import DirectedWeightedGraph
 
 
-def basic_object_filter(action):
-    affected_objects = action.get_referenced_objects(sections=["add","del"])
-    latoms = []
-    for latom in action.atoms:
-        args = latom.atom.args
-        if not args:
-            latoms.append(latom)
-        elif len(args) == 1 and args[0] in affected_objects:
-            latoms.append(latom)
-        elif len(args) > 1 and sum(arg in affected_objects for arg in args) >= 2:
-            latoms.append(latom)
-    return Action(action.name, atoms=latoms)
+class BasicObjectFilter:
+    def __init__(self, constants=None):
+        self.constants = constants
+
+    def __call__(self, action):
+        affected_objects = action.get_referenced_objects(sections=["add","del"])
+        if self.constants is not None:
+            affected_objects.update(self.constants)
+        latoms = [latom for latom in action.atoms if affected_objects.issuperset(latom.atom.args)]
+        return Action(action.name, action.parameters, latoms)
 
 
 def default_edge_creator(graph, latom):

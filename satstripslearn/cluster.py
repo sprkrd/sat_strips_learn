@@ -3,7 +3,7 @@ import z3
 from itertools import product
 
 from .openworld import Action, ACTION_SECTIONS
-from .utils import dict_leq, Timer, try_parse_number
+from .utils import Timer, dict_leq, try_parse_number, inverse_map
 
 
 class Cluster:

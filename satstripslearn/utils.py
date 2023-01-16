@@ -7,7 +7,7 @@ def get_memory_usage():
     Returns
     -------
     memuse : dict
-        A dict from str (name of memory figure) to Int (size in KB)
+        A dict from str (name of memory figure) to Int (size in MB)
     """
     memuse = {}
     with open("/proc/self/status") as status:
@@ -15,8 +15,8 @@ def get_memory_usage():
         for line in status:
             parts = line.split()
             if parts[0].startswith("Vm"):
-                key = parts[0][2:-1].lower()
-                memuse[key] = int(parts[1])
+                key = parts[0][:-1].lower()
+                memuse[key] = float(parts[1])/1024
     return memuse
 
 

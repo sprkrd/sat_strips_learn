@@ -2,6 +2,7 @@ import graphviz as gv
 
 from .strips import _untyped_objlist_to_pddl
 
+COLOR_DEFAULT = "#000000"
 COLOR_TGA = "#00008b"
 COLOR_CLOSEST_ACTION = "#c9211e"
 COLOR_LAST_ADDED_ACTION = "#008000"
@@ -11,7 +12,6 @@ ACTION_NODE_STYLE = {
     "fontname": "Arial",
     "shape": "none",
     "margin": "0",
-    "fontcolor": "black"
 }
 
 CLUSTER_NODE_STYLE = {
@@ -27,6 +27,7 @@ COARSE_ACTION_NODE_STYLE = {
     "width": "0.5",
     "fixedsize": "true",
     "style": "filled",
+    "fillcolor": "white",
 }
 
 COARSE_CLUSTER_NODE_STYLE = {
@@ -34,7 +35,6 @@ COARSE_CLUSTER_NODE_STYLE = {
     "width": "0.25",
     "fixedsize": "true",
     "style": "filled",
-    "fillcolor": "black",
     "penwidth": "0",
 }
 
@@ -70,7 +70,7 @@ ACTION_NODE_TMP = \
 
 
 CLUSTER_NODE_TMP = \
-    '<<table bgcolor="black" style="rounded" border="0" cellborder="0" cellspacing="4" cellpadding="3">'\
+    '<<table bgcolor="{color}" style="rounded" border="0" cellborder="0" cellspacing="4" cellpadding="3">'\
         '<tr>'\
             '<td style="rounded" align="left">'\
                 '<b>dist.:  </b> {cluster_distance:.02f}'\
@@ -85,7 +85,7 @@ CLUSTER_NODE_TMP = \
 
 
 def action_key(action):
-    name = action.action.name
+    name = action.name
     if name.startswith("action-"):
         return int(name[len("action-"):])
     return 0
@@ -153,7 +153,7 @@ def format_atom_list(atom_list, atom_limit=1000, line_len=40):
 
 
 def draw_action_node(g, action, atom_limit=1000, line_len=40, highlight=False,
-        color="black"):
+        color=COLOR_DEFAULT):
     action = action.action
     label = ACTION_NODE_TMP.format(
         color=color,
@@ -163,36 +163,45 @@ def draw_action_node(g, action, atom_limit=1000, line_len=40, highlight=False,
         action_pre=format_atom_list(action.get_atoms_in_section("pre"), atom_limit=atom_limit, line_len=line_len),
         action_add=format_atom_list(action.get_atoms_in_section("add"), atom_limit=atom_limit, line_len=line_len),
         action_del=format_atom_list(action.get_atoms_in_section("del"), atom_limit=atom_limit, line_len=line_len))
-    g.node(action.name, label=label)
+    g.node(action.name, label=label, fontcolor=color)
 
 
-def draw_cluster_node(g, cluster):
-    label = CLUSTER_NODE_TMP.format(cluster_distance=cluster.distance,
+def draw_cluster_node(g, cluster, color):
+    label = CLUSTER_NODE_TMP.format(color=color,
+                                    cluster_distance=cluster.distance,
                                     norm_distance=cluster.normalized_distance)
-    g.node("cluster-" + cluster.action.name, label=label)
+    g.node("cluster-" + cluster.name, label=label)
 
 
-def action_color_dict(flat_actions):
+def action_color_dict(flat_actions, highlight_last_actions, dim_non_updated):
     colors = {}
-    last_added_action = flat_actions[-1]
-    colors[last_added_action.action.name] = COLOR_LAST_ADDED_ACTION
-    if not last_added_action.is_tga():
-        # OARU always stores the previous closest action in the left parent
-        # and the TGA generated from the transition in the right parent
-        closest = last_added_action.left_parent
-        tga = last_added_action.right_parent
-        colors[closest.action.name] = COLOR_CLOSEST_ACTION
-        colors[tga.action.name] = COLOR_TGA
+    if highlight_last_actions:
+        last_added_action = flat_actions[-1]
+        colors[last_added_action.name] = COLOR_LAST_ADDED_ACTION
+        if not last_added_action.is_tga():
+            # OARU always stores the previous closest action in the left parent
+            # and the TGA generated from the transition in the right parent
+            closest = last_added_action.left_parent
+            tga = last_added_action.right_parent
+            colors[closest.name] = COLOR_CLOSEST_ACTION
+            colors[tga.name] = COLOR_TGA
+    if dim_non_updated:
+        for action in flat_actions:
+            if not action.is_tga() and not action.updates_left():
+                left_parent = action.left_parent
+                right_parent = action.right_parent
+                colors[left_parent.name] = colors.get(left_parent.name,COLOR_DEFAULT) + "70"
+                colors[right_parent.name] = colors.get(right_parent.name,COLOR_DEFAULT) + "70"
     return colors
 
 
 def draw_cluster_graph(top_actions, line_len=30, atom_limit_top=1000, atom_limit_middle=2,
-        highlight_top=True, highlight_last_actions=False, rankdir="BT"):
+        highlight_top=True, highlight_last_actions=False, dim_non_updated=True, rankdir="BT"):
     g = gv.Graph("g")
     g.attr(fontname="Arial")
     g.attr(rankdir=rankdir)
     flat_actions = flatten(top_actions)
-    colors = action_color_dict(flat_actions) if highlight_last_actions else {}
+    colors = action_color_dict(flat_actions, highlight_last_actions, dim_non_updated)
     middle_actions = [act for act in flat_actions if act not in top_actions]
     g.attr("node", **ACTION_NODE_STYLE)
     # for action in top_actions:
@@ -202,52 +211,58 @@ def draw_cluster_graph(top_actions, line_len=30, atom_limit_top=1000, atom_limit
         s.attr(rank="same", label="<<b>Action library</b>>")
         for action in top_actions:
             draw_action_node(s, action, atom_limit=atom_limit_top, line_len=line_len,
-                    color=colors.get(action.action.name,"black"), highlight=highlight_top)
+                    color=colors.get(action.name,COLOR_DEFAULT), highlight=highlight_top)
     for action in middle_actions:
         draw_action_node(g, action, atom_limit=atom_limit_middle,
-                color=colors.get(action.action.name,"black"), line_len=line_len)
+                color=colors.get(action.name,COLOR_DEFAULT), line_len=line_len)
     g.attr("node", **CLUSTER_NODE_STYLE)
     clusters = [action for action in flat_actions if not action.is_tga()]
     for cluster in clusters:
-        draw_cluster_node(g, cluster)
+        color = COLOR_DEFAULT
+        if dim_non_updated and not cluster.updates_left():
+            color += "80"
+        draw_cluster_node(g, cluster, color)
     for action in flat_actions:
         if not action.is_tga():
-            left_parent = action.left_parent.action.name
-            right_parent = action.right_parent.action.name
-            cluster = "cluster-" + action.action.name
+            left_parent = action.left_parent.name
+            right_parent = action.right_parent.name
+            cluster = "cluster-" + action.name
             g.edge(left_parent, cluster)
             g.edge(right_parent, cluster)
-            g.edge(cluster, action.action.name)
+            g.edge(cluster, action.name)
     return g
 
 
 def draw_coarse_cluster_graph(top_actions, highlight_top=True,
-        highlight_last_actions=False, rankdir="BT"):
+        highlight_last_actions=False, dim_non_updated=False, rankdir="BT"):
     g = gv.Graph("g")
     g.attr(rankdir=rankdir)
     flat_actions = flatten(top_actions)
-    colors = action_color_dict(flat_actions) if highlight_last_actions else {}
+    colors = action_color_dict(flat_actions, highlight_last_actions, dim_non_updated)
     middle_actions = [act for act in flat_actions if act not in top_actions]
     g.attr("node", **COARSE_ACTION_NODE_STYLE)
     with g.subgraph(name="cluster_actionlib") as s:
         s.attr(rank="same")
         for action in top_actions:
-            s.node(action.action.name, label="", fillcolor=colors.get(action.action.name,"white"),
+            s.node(action.name, label="", color=colors.get(action.name,COLOR_DEFAULT),
                     penwidth="4" if highlight_top else "1")
     for action in middle_actions:
-        g.node(action.action.name, label="", fillcolor=colors.get(action.action.name,"white"))
+        g.node(action.name, label="", color=colors.get(action.name,COLOR_DEFAULT))
     g.attr("node", **COARSE_CLUSTER_NODE_STYLE)
     clusters = [action for action in flat_actions if not action.is_tga()]
     for cluster in clusters:
-        g.node("cluster-" + cluster.action.name, label="")
+        color = COLOR_DEFAULT
+        if dim_non_updated and not cluster.updates_left():
+            color += "80"
+        g.node("cluster-" + cluster.name, label="", fillcolor=color)
     for action in flat_actions:
         if not action.is_tga():
-            left_parent = action.left_parent.action.name
-            right_parent = action.right_parent.action.name
-            cluster = "cluster-" + action.action.name
+            left_parent = action.left_parent.name
+            right_parent = action.right_parent.name
+            cluster = "cluster-" + action.name
             g.edge(left_parent, cluster)
             g.edge(right_parent, cluster)
-            g.edge(cluster, action.action.name)
+            g.edge(cluster, action.name)
     return g
 
 

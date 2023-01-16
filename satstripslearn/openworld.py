@@ -218,12 +218,13 @@ class Action:
                 if arg.is_variable() and arg not in self.parameters:
                     raise ValueError(f"Variable {arg} is not present in the list of parameters")
 
-    def to_strips(self, keep_uncertain=True):
-        name = self.name
-        parameters = self.parameters
-        precondition = [atom.atom for atom in self.get_atoms_in_section(["pre"], keep_uncertain)]
-        add_list = [atom.atom for atom in self.get_atoms_in_section(["add"], keep_uncertain)]
-        del_list = [atom.atom for atom in self.get_atoms_in_section(["del"], keep_uncertain)]
+    def to_strips(self):
+        if self._cached_strips is None: 
+            name = self.name
+            parameters = self.parameters
+            precondition = [atom.atom for atom in self.get_atoms_in_section(["pre"], True)]
+            add_list = [atom.atom for atom in self.get_atoms_in_section(["add"], True)]
+            del_list = [atom.atom for atom in self.get_atoms_in_section(["del"], True)]
         return StripsAction(name, parameters, precondition, add_list, del_list)
 
     def get_atoms_in_section(self, sections=None, include_uncertain=True):

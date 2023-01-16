@@ -6,6 +6,22 @@ from .openworld import Action, ACTION_SECTIONS
 from .utils import Timer, dict_leq, try_parse_number, inverse_map
 
 
+def action_digest(a):
+    count_certain = 0
+    count_uncertain = 0
+    arity = len(a.parameters)
+    for latom in a.atoms:
+        if latom.certain:
+            count_certain += 1
+        else:
+            count_uncertain += 1
+    return (count_certain, count_uncertain, arity)
+
+
+def check_updated(a0, a1):
+    return action_digest(a0) != action_digest(a1)
+
+
 class Cluster:
     def __init__(self, action, additional_info=None):
         self.action = action
@@ -13,6 +29,16 @@ class Cluster:
 
     def is_tga(self):
         return self.additional_info is None
+
+    def updates_left(self):
+        return check_updated(self.action, self.left_parent.action)
+
+    def updates_right(self):
+        return check_updated(self.action, self.right_parent.action)
+
+    @property
+    def name(self):
+        return self.action.name
 
     @property
     def distance(self):
@@ -29,6 +55,8 @@ class Cluster:
     @property
     def right_parent(self):
         return self.additional_info["right_parent"]
+
+    
 
 
 class VariableStorage:

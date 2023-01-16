@@ -1,5 +1,5 @@
 from .cluster import cluster, Cluster
-from .utils import Timer
+from .utils import Timer, get_memory_usage
 from .openworld import Action
 from .viz import draw_cluster_graph, draw_coarse_cluster_graph
 
@@ -11,143 +11,214 @@ def action_from_transition(s, s_next, latom_filter=None):
     return Cluster(a)
 
 
-def action_digest(a):
-    count_certain = 0
-    count_uncertain = 0
-    arity = len(a.parameters)
-    for latom in a.atoms:
-        if latom.certain:
-            count_certain += 1
-        else:
-            count_uncertain += 1
-    return (count_certain, count_uncertain, arity)
-
-
-def check_updated(a0, a1):
-    return action_digest(a0) != action_digest(a1)
-
-
 class Operation:
-    def __init__(self, added, removed, description, wall_time, cpu_time, max_mem):
-        self.added = added
-        self.removed = removed
-        self.description = description
-        self.wall_time = wall_time
-        self.cpu_time = cpu_time
-        self.max_mem = max_mem
+    def __init__(self):
+        self.id = None
+        self.name = None
+        self.description = None
+        self.new_actions = None
+        self.removed_actions = None
+        self.wall_time = None
+        self.cpu_time = None
+        self.max_mem = None
+
+    def __str__(self):
+        new_str = ", ".join(action.name for action in self.new_actions)
+        removed_str = ", ".join(action.name for action in self.removed_actions)
+        return f"{self.id}: {self.name}. {self.description}. Added actions [{new_str}]. "\
+               f"Removed actions: [{removed_str}]. "\
+               f"Wall time (ms): {self.wall_time*1000}. "\
+               f"CPU time (ms): {self.cpu_time*1000}. "\
+               f"Peak memory (MB): {self.max_mem}"
 
 
 class OaruAlgorithm:
-    def __init__(self, action_library=None, double_filtering=False, cluster_opts=None):
-        self.action_library = action_library or {}
+    def __init__(self, double_filtering=False, cluster_opts=None, add_non_novel=True):
+        self._next_action_id = 1
+        self._cluster_cache = {}
+        self._transitions = []
+        self.action_library = {}
         self.negative_examples = []
+        self.history = []
         self.double_filtering = double_filtering
         self.cluster_opts = cluster_opts or {}
+        self.add_non_novel = add_non_novel
 
-    def action_recognition(self, s, s_next, latom_filter=None):
+    def undo_last_action(self):
+        if not self.history:
+            raise IndexError("Empty history, cannot undo last action")
+        last_operation = self.history.pop()
+        for action_cluster in last_operation.added_actions:
+            del self.action_library[action_cluster.name]
+        for action_cluster in last_operation.removed_actions:
+            self.action_library[action_cluster.name] = action_cluster
+        if last_operation.name == "new_negative_example":
+            self.negative_examples.pop()
+
+    def _new_action(self, action, add_to_library=True):
+        action.action.name = f"action-{self._next_action_id}"
+        self._next_action_id += 1
+        if add_to_library:
+            self.action_library[action.name] = action
+
+    def _cluster(self, a, tga):
+        try:
+            new_cluster = self._cluster_cache[(a.name, tga.name)]
+        except KeyError:
+            new_cluster = cluster(a, tga, **self.cluster_opts)
+            self._cluster_cache[(a.name, tga.name)] = new_cluster
+        return new_cluster
+
+    def _action_recognition(self, tga, latom_filter=None):
         timer = Timer()
-        max_mem = 0
-        a = action_from_transition(s, s_next, latom_filter)
         replaced_action = None
-        found_u = None
-        dist_found_u = float('inf')
+        updated_action = None
+        dist_updated = float('inf')
         for a_lib in self.action_library.values():
-            a_u = cluster(a_lib, a, **self.cluster_opts)
-            if a_u is not None and latom_filter and self.double_filtering:
-                a_u.action = feature_filter(a_u.action)
-            dist_u = float('inf') if a_u is None else a_u.distance
-            if dist_u < dist_found_u and not self._allows_negative_example(a_u.action):
-                mem_z3 = a_u.additional_info["z3_stats"]["memory"]
-                max_mem = max(max_mem, mem_z3)
+            new_cluster = self._cluster(a_lib, tga)
+            if new_cluster is not None and latom_filter and self.double_filtering:
+                new_cluster.action = latom_filter(new_cluster.action)
+            dist_cluster = float('inf') if new_cluster is None else new_cluster.distance
+            if dist_cluster < dist_updated and not self._allows_negative(new_cluster):
                 replaced_action = a_lib
-                found_u = a_u
-                dist_found_u = dist_u
-        updated = True
-        if found_u is not None:
-            updated = check_updated(replaced_action.action, found_u.action)
-            sigma = found_u.additional_info["sigma_right"]
-            # if updated:
-                # del self.action_library[replaced_action.action.name]
-                # self.action_library[found_u.action.name] = found_u
-                # a_g = found_u.action.replace(sigma)
-            # else:
-                # a_g = replaced_action.action.replace(sigma)
-            del self.action_library[replaced_action.action.name]
-            self.action_library[found_u.action.name] = found_u
-            a_g = found_u.action.replace(sigma)
+                updated_action = new_cluster
+                dist_updated = dist_cluster
+
+        op = Operation()
+        op.id = len(self.history)
+        op.name = "new_demonstration"
+        library_updated = False
+        if updated_action is None:
+            self._new_action(tga)
+            a_g = tga.action
+            library_updated = True
+            op.description = f"Added TGA {tga.name}"
+            op.new_actions = [tga]
+            op.removed_actions = []
+        elif updated_action.updates_left() or self.add_non_novel:
+            sigma = updated_action.additional_info["sigma_right"]
+            self._new_action(tga, add_to_library=False)
+            self._new_action(updated_action)
+            del self.action_library[replaced_action.name]
+            a_g = updated_action.action.replace(sigma)
+            library_updated = True
+            op.description = f"Action {replaced_action.name} upgraded to {updated_action.name}"
+            op.new_actions = [updated_action]
+            op.removed_actions = [replaced_action]
         else:
-            self.action_library[a.action.name] = a
-            a_g = a.action
+            sigma = updated_action.additional_info["tau"]
+            a_g = replaced_action.action.replace(sigma)
+            op.description = f"No updates, action {replaced_action.name} "\
+                             f"already explains the demonstration)"
+            op.new_actions = []
+            op.removed_actions = []
 
         elapsed_cpu, elapsed_wall = timer.toc()
+        memuse = get_memory_usage()
 
-        op_num = (self.last_operation.op_num+1) if self.last_operation else 0
-        op_id = "positive_example"
-        op_info = {
-            "updated": updated,
-            "schema": a_g.name if updated else found_u.action.name
-        }
+        op.wall_time = elapsed_wall
+        op.cpu_time = elapsed_cpu
+        op.max_mem = memuse["vmpeak"]
+        self.history.append(op)
+        return a_g, library_updated
 
-        self.last_operation = Operation(op_num, op_id, op_info, elapsed_wall, elapsed_cpu, max_mem)
+    def action_recognition(self, s, s_next, latom_filter=None):
+        tga = action_from_transition(s, s_next, latom_filter)
+        self._transitions.append((tga,latom_filter))
+        return self._action_recognition(tga)
 
-        return a_g, updated
 
-    def _can_produce_transition(self, a, s, s_next):
-        a = a.to_strips(False)
-        for a_g in a.all_groundings(self.constants, s.atoms):
-            if a_g.apply(s.atoms) == s_next.atoms:
-                return True
-        return False
+    def _can_produce_transition(self, action, tga):
+        updated_action = cluster(action, tga, **self.cluster_opts)
+        return updated_action is not None and not updated_action.updates_left()
 
-    def _refactor(self, action, neg_example):
-        unchecked_actions = [action]
-        while unchecked_actions:
-            unchecked_actions_next = []
-            for a in unchecked_actions:
-                if self._can_produce_transition(a.action, *neg_example):
-                    assert not a.is_tga(), "Cannot undo TGA!"
-                    parent_left = a.left_parent
-                    parent_right = a.right_parent
-                    unchecked_actions_next.append(parent_left)
-                    unchecked_actions_next.append(parent_right)
-                    del self.action_library[a.action.name]
-                    self.action_library[parent_left.action.name] = parent_left
-                    self.action_library[parent_right.action.name] = parent_right
-            unchecked_actions = unchecked_actions_next
+    def _allows_negative(self, action):
+        return any(self._can_produce_transition(action, n) for n in self.negative_examples)
 
-    def _allows_negative_example(self, action):
-        for neg_example in self.negative_examples:
-            if self._can_produce_transition(action, *neg_example):
-                return True
-        return False
+    # def _refactor(self, action, neg_example):
+        # unchecked_actions = [action]
+        # while unchecked_actions:
+            # unchecked_actions_next = []
+            # for a in unchecked_actions:
+                # if not self._can_produce_transition(a, neg_example):
+                    # continue
+                # if a.is_tga():
+                    # raise ValueError("Cannot undo TGA!")
+                # parent_left = a.left_parent
+                # parent_right = a.right_parent
+                # unchecked_actions_next.append(parent_left)
+                # unchecked_actions_next.append(parent_right)
+                # del self.action_library[a.name]
+                # self.action_library[parent_left.name] = parent_left
+                # self.action_library[parent_right.name] = parent_right
+            # unchecked_actions = unchecked_actions_next
 
-    def _remerge(self, already_checked=None):
-        already_checked = already_checked or set()
-        action_list = list(self.action_library.values())
-        for i, action_1 in enumerate(action_list):
-            for action_2 in action_list[i+1:]:
-                if (action_1,action_2) in already_checked in already_checked:
-                    continue
-                already_checked.add((action_1, action_2))
-                already_checked.add((action_2, action_1))
-                a_u = cluster(action_1, action_2, **self.cluster_opts)
-                if a_u is not None and not self._allows_negative_example(a_u.action):
-                    del self.action_library[action_1.action.name]
-                    del self.action_library[action_2.action.name]
-                    self.action_library[a_u.name] = a_u
-                    return True, already_checked
-        return False, already_checked
+    # def _remerge(self):
+        # cluster_cache = self._cluster_cache
+        # action_list = list(self.action_library.values())
+
+        # min_dist = float('inf')
+        # candidate_1 = None
+        # candidate_2 = None
+        # updated_action = None
+
+        # for i, action_1 in enumerate(action_list):
+            # for action_2 in action_list[i+1:]:
+                # try:
+                    # new_cluster = cluster_cache[(action_1.name, action_2.name)]
+                # except KeyError:
+                    # new_cluster = cluster(action_1, action_2, **self.cluster_opts)
+                    # cluster_cache[(action_1.name, action_2.name)] = new_cluster
+                    # cluster_cache[(action_2.name, action_1.name)] = new_cluster
+                # if new_cluster is None:
+                    # continue
+                # if self._allows_negative(new_cluster):
+                    # continue
+                # dist_cluster = new_cluster.distance
+                # if dist_cluster < min_dist:
+                    # candidate_1 = action_1
+                    # candidate_2 = action_2
+                    # updated_action = new_cluster
+
+        # if updated_action is not None:
+            # del self.action_library[candidate_1.name]
+            # del self.action_library[candidate_2.name]
+            # self._new_action(updated_action)
+            # return True
+
+        # return False
 
     def add_negative_example(self, pre_state, post_state):
-        neg_example = (pre_state, post_state)
+        timer = Timer()
+
+        neg_example = action_from_transition(pre_state, post_state)
+        neg_example.action.name = f"negative-example-{len(self.negative_examples)+1}"
         self.negative_examples.append(neg_example)
+
+        actions_before_operation = set(self.action_library.values())
 
         for action in list(self.action_library.values()):
             self._refactor(action, neg_example)
 
-        merged, already_checked = self._remerge()
-        while merged:
-            merged, already_checked = self._remerge(already_checked)
+        updated = True
+        while updated:
+            updated = self._remerge()
+
+        actions_after_operation = set(self.action_library.values())
+
+        elapsed_cpu, elapsed_wall = timer.toc()
+        memuse = get_memory_usage()
+
+        op = Operation()
+        op.id = len(self.history)
+        op.name = "new_negative_example"
+        op.description = f"Added negative example {neg_example.name}"
+        op.new_actions = list(actions_after_operation - actions_before_operation)
+        op.removed_actions = list(actions_before_operation - actions_after_operation)
+        op.wall_time = elapsed_wall
+        op.cpu_time = elapsed_cpu
+        op.max_mem = memuse["vmpeak"]
+        self.history.append(op)
 
     def draw_graph(self, outdir, coarse=False, view=False, cleanup=True,
             filename="g.gv", format="pdf", **kwargs):
@@ -156,3 +227,4 @@ class OaruAlgorithm:
         else:
             g = draw_cluster_graph(list(self.action_library.values()), **kwargs)
         g.render(outdir+"/"+filename, view=view, cleanup=cleanup, format=format)
+

@@ -49,6 +49,7 @@ class Game:
             self.objects.append(this_col)
             if previous_col:
                 self.static_atoms.add(Right(previous_col, this_col))
+            previous_col = this_col
 
         if game_name == "king":
             self.objects.append(Token("k"))
@@ -129,15 +130,42 @@ def propose_example(game, oaru, history_updates, history_proposals, min_non_upda
     return rng.choice(actions)
 
 
-def edge_creator(atom, atom_type):
-    edges = {}
-    if atom_type != "deleted":
-        if atom[0] == "at":
-            edges[(atom[1],atom[2])] = 0
-            edges[(atom[2],atom[1])] = 0
-        elif atom[0] in ("left", "down", "right", "up"):
-            edges[(atom[1],atom[2])] = 1
-    return edges
+def cell_distance(cell1, cell2):
+    dx = ord(cell1[0]) - ord(cell2[0])
+    dy = ord(cell1[1]) - ord(cell2[1])
+    return abs(dx) + abs(dy)
+
+
+class AttentionFilter:
+    def __init__(self, max_allowed_distance, sections=["add", "del"]):
+        self.max_allowed_distance = max_allowed_distance
+        self.sections = sections
+
+    def __call__(self, action):
+        attention = action.get_referenced_objects(sections=["add","del"])
+        affected_tokens_cells = []
+        for latom in action.get_atoms_in_section(sections=self.sections):
+            if latom.atom.head == "at":
+                args = latom.atom.args
+                token = args[0].name
+                cell = args[1].name[-1] + args[2].name[-1]
+                print(cell)
+                affected_tokens_cells.append(cell)
+        
+        for latom in action.get_atoms_in_section(sections=["pre"]):
+            if latom.atom.head == "at":
+                args = latom.atom.args
+                token = args[0].name
+                cell = args[1].name[-1] + args[2].name[-1]
+                print(cell)
+                min_dist = min(cell_distance(cell,other) for other in affected_tokens_cells)
+                if min_dist <= self.max_allowed_distance:
+                    attention.update(args)
+
+        print(affected_tokens_cells)
+
+        latoms = [latom for latom in action.atoms if attention.issuperset(latom.atom.args)]
+        return Action(action.name, None, latoms)
 
 
 def main():
@@ -152,7 +180,8 @@ def main():
     game = Game(game_name, seed)
     oaru = OaruAlgorithm(double_filtering=False)
     #f = BasicObjectFilter()
-    f = ObjectGraphFilter(
+    f = AttentionFilter(1, ["add", "del"])
+    # f = AttentionFilter(1)
 
     # oaru = OaruAlgorithm(filters=[{"min_score": -1, "fn": min}], normalize_dist=False, double_filtering=True)
 
@@ -203,7 +232,7 @@ def main():
         game.pick_and_place(token, dst)
         s_next = game.get_state()
         a_g, updated = oaru.action_recognition(s_prev, s_next, f)
-        oaru.draw_graph("terminal_demo", filename=f"demo_{i}.gv", view=True)
+        oaru.draw_graph("terminal_demo", filename=f"demo_{i}.gv", view=True, atom_limit_middle=30)
         print(f"{len(oaru.action_library)} action(s) after demonstration")
 
         #history_updates.append(updated)

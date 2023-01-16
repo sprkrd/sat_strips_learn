@@ -46,7 +46,7 @@ class DirectedWeightedGraph:
         import graphviz as gv
         g = gv.Digraph()
         for u in self.nodes:
-            g.node(u)
+            g.node(str(u))
         for (u,v),w in self.edges.items():
-            g.edge(u, v, label=str(w))
+            g.edge(str(u), str(v), label=str(w))
         return g

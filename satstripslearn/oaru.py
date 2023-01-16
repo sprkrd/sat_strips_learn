@@ -55,17 +55,18 @@ class OaruAlgorithm:
         if last_operation.name == "new_negative_example":
             self.negative_examples.pop()
 
-    def _new_action(self, action, add_to_library=True):
-        action.action.name = f"action-{self._next_action_id}"
-        self._next_action_id += 1
-        if add_to_library:
-            self.action_library[action.name] = action
+    def _rename(self, action):
+        if action.name == "unnamed":
+            action.action.name = f"action-{self._next_action_id}"
+            self._next_action_id += 1
 
-    def _cluster(self, a, tga):
+    def _cluster(self, a, tga, latom_filter=None):
         try:
             new_cluster = self._cluster_cache[(a.name, tga.name)]
         except KeyError:
             new_cluster = cluster(a, tga, **self.cluster_opts)
+            if latom_filter is not None and self.double_filtering:
+                new_cluster.action = latom_filter(new_cluster.action)
             self._cluster_cache[(a.name, tga.name)] = new_cluster
         return new_cluster
 
@@ -75,9 +76,7 @@ class OaruAlgorithm:
         updated_action = None
         dist_updated = float('inf')
         for a_lib in self.action_library.values():
-            new_cluster = self._cluster(a_lib, tga)
-            if new_cluster is not None and latom_filter and self.double_filtering:
-                new_cluster.action = latom_filter(new_cluster.action)
+            new_cluster = self._cluster(a_lib, tga, latom_filter)
             dist_cluster = float('inf') if new_cluster is None else new_cluster.distance
             if dist_cluster < dist_updated and not self._allows_negative(new_cluster):
                 replaced_action = a_lib
@@ -89,7 +88,7 @@ class OaruAlgorithm:
         op.name = "new_demonstration"
         library_updated = False
         if updated_action is None:
-            self._new_action(tga)
+            self.action_library[tga.name] = tga
             a_g = tga.action
             library_updated = True
             op.description = f"Added TGA {tga.name}"
@@ -97,8 +96,8 @@ class OaruAlgorithm:
             op.removed_actions = []
         elif updated_action.updates_left() or self.add_non_novel:
             sigma = updated_action.additional_info["sigma_right"]
-            self._new_action(tga, add_to_library=False)
-            self._new_action(updated_action)
+            self._rename(updated_action)
+            self.action_library[updated_action.name] = updated_action
             del self.action_library[replaced_action.name]
             a_g = updated_action.action.replace(sigma)
             library_updated = True
@@ -119,14 +118,15 @@ class OaruAlgorithm:
         op.wall_time = elapsed_wall
         op.cpu_time = elapsed_cpu
         op.max_mem = memuse["vmpeak"]
-        self.history.append(op)
-        return a_g, library_updated
+        return a_g, library_updated, op
 
     def action_recognition(self, s, s_next, latom_filter=None):
         tga = action_from_transition(s, s_next, latom_filter)
-        self._transitions.append((tga,latom_filter))
-        return self._action_recognition(tga)
-
+        self._rename(tga)
+        self._transitions.append((tga, latom_filter))
+        a_g, library_updated, op = self._action_recognition(tga, latom_filter)
+        self.history.append(op)
+        return a_g, library_updated
 
     def _can_produce_transition(self, action, tga):
         updated_action = cluster(action, tga, **self.cluster_opts)
@@ -188,6 +188,38 @@ class OaruAlgorithm:
 
         # return False
 
+    # def add_negative_example(self, pre_state, post_state):
+        # timer = Timer()
+
+        # neg_example = action_from_transition(pre_state, post_state)
+        # neg_example.action.name = f"negative-example-{len(self.negative_examples)+1}"
+        # self.negative_examples.append(neg_example)
+
+        # actions_before_operation = set(self.action_library.values())
+
+        # for action in list(self.action_library.values()):
+            # self._refactor(action, neg_example)
+
+        # updated = True
+        # while updated:
+            # updated = self._remerge()
+
+        # actions_after_operation = set(self.action_library.values())
+
+        # elapsed_cpu, elapsed_wall = timer.toc()
+        # memuse = get_memory_usage()
+
+        # op = Operation()
+        # op.id = len(self.history)
+        # op.name = "new_negative_example"
+        # op.description = f"Added negative example {neg_example.name}"
+        # op.new_actions = list(actions_after_operation - actions_before_operation)
+        # op.removed_actions = list(actions_before_operation - actions_after_operation)
+        # op.wall_time = elapsed_wall
+        # op.cpu_time = elapsed_cpu
+        # op.max_mem = memuse["vmpeak"]
+        # self.history.append(op)
+
     def add_negative_example(self, pre_state, post_state):
         timer = Timer()
 
@@ -197,12 +229,9 @@ class OaruAlgorithm:
 
         actions_before_operation = set(self.action_library.values())
 
-        for action in list(self.action_library.values()):
-            self._refactor(action, neg_example)
-
-        updated = True
-        while updated:
-            updated = self._remerge()
+        self.action_library.clear()
+        for tga, latom_filter in self._transitions:
+            self._action_recognition(tga, latom_filter)
 
         actions_after_operation = set(self.action_library.values())
 

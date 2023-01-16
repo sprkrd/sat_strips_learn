@@ -1,9 +1,26 @@
 #!/usr/bin/env python3
 
 import random
-from satstripslearn.state import State
-from satstripslearn.feature_filter import ObjectGraphFilter, basic_object_filter
-from satstripslearn.action import Action
+from satstripslearn.strips import Predicate, ObjType, ROOT_TYPE
+from satstripslearn.openworld import Context, Action
+from satstripslearn.latom_filter import ObjectGraphFilter, BasicObjectFilter
+
+
+# available object types
+Row = ObjType("row", ROOT_TYPE)
+Col = ObjType("col", ROOT_TYPE)
+Token = ObjType("token", ROOT_TYPE)
+NumberToken = ObjType("number-token", Token)
+
+
+# available predicates
+Up = Predicate("up", Row, Row)
+Right = Predicate("right", Col, Col)
+SmallerThan = Predicate("smaller-than", NumberToken, NumberToken)
+At = Predicate("at", Token, Col, Row)
+Empty = Predicate("empty", Col, Row)
+GoalAchieved = Predicate("goal-achieved")
+
 
 class Game:
     def __init__(self, game_name, seed=None):
@@ -14,12 +31,38 @@ class Game:
         self.time_step = 0
         self.previous_token = "none"
         self.previous_destination = "none"
+
+        self.objects = []
+        self.static_atoms = set()
+
+        previous_row = None
+        for i in range(1, 5):
+            this_row = Row(f"row_{i}")
+            self.objects.append(this_row)
+            if previous_row:
+                self.static_atoms.add(Up(previous_row, this_row))
+            previous_row = this_row
+
+        previous_col = None
+        for c in "abcde":
+            this_col = Col(f"col_{c}")
+            self.objects.append(this_col)
+            if previous_col:
+                self.static_atoms.add(Right(previous_col, this_col))
+
         if game_name == "king":
+            self.objects.append(Token("k"))
+
             row = rng.randint(0,3)
             col = rng.randint(0,4)
             self.board[row][col] = "k"
         else:
             numbers = list(range(10))
+            for i, n in enumerate(numbers):
+                self.objects.append(NumberToken(str(n)))
+                for m in numbers[i+1:]:
+                    self.static_atoms.add(SmallerThan(NumberToken(str(n)), NumberToken(str(m))))
+
             rng.shuffle(numbers)
             for i, num in enumerate(numbers):
                 row = 2 + i//5
@@ -59,40 +102,17 @@ class Game:
         self.previous_destination = destination
 
     def get_state(self):
-        predicates = set()
+        atoms = self.static_atoms.copy()
         for row_number, row in zip("4321", self.board):
             for col_id, cell in zip("abcde", row):
-                cell_id = col_id + row_number
-                predicates.add(("location", cell_id))
-                if row_number != "4":
-                    row_up = str(int(row_number)+1)
-                    predicates.add(("up", cell_id, col_id+row_up))
-                if row_number != "1":
-                    row_down = str(int(row_number)-1)
-                    predicates.add(("down", cell_id, col_id+row_down))
-                if col_id != "a":
-                    col_left = chr(ord(col_id)-1)
-                    predicates.add(("left", cell_id, col_left+row_number))
-                if col_id != "e":
-                    col_right = chr(ord(col_id)+1)
-                    predicates.add(("right", cell_id, col_right+row_number))
+                col_obj = Col(f"col_{col_id}")
+                row_obj = Row(f"row_{row_number}")
                 if cell is None:
-                    predicates.add(("empty", cell_id))
+                    atoms.add(Empty(col_obj, row_obj))
                 else:
-                    predicates.add(("token", cell))
-                    predicates.add(("at", cell, cell_id))
-        if self.game_name == "numbers":
-            for i in range(10):
-                for j in range(i+1,10):
-                    predicates.add(("less-than", str(i), str(j)))
-        for i in range(50):
-            predicates.add(("timestep", f"t{i}"))
-        for i in range(1,50):
-            predicates.add(("next-timestep", f"t{i-1}", f"t{i}"))
-        # predicates.add(("previous-token", self.previous_token))
-        # predicates.add(("previous-destination", self.previous_destination))
-        predicates.add(("current-timestep", f"t{self.time_step}"))
-        return State(predicates)
+                    tok_obj = Token(cell) if self.game_name == "king" else NumberToken(cell)
+                    atoms.add(At(tok_obj, col_obj, row_obj))
+        return Context(self.objects, atoms)
 
 
 def propose_example(game, oaru, history_updates, history_proposals, min_non_updated, min_no_proposals, rng=random):
@@ -126,66 +146,68 @@ def main():
     random.seed(100)
     game_name = input("Game? ")
     seed = int(input("Seed? "))
-    ask_frequency = int(input("Example frequency? "))
+    #ask_frequency = int(input("Example frequency? "))
 
 
     game = Game(game_name, seed)
-    oaru = OaruAlgorithm(filters=[basic_object_filter], normalize_dist=False, double_filtering=False)
+    oaru = OaruAlgorithm(double_filtering=False)
+    #f = BasicObjectFilter()
+    f = ObjectGraphFilter(
+
     # oaru = OaruAlgorithm(filters=[{"min_score": -1, "fn": min}], normalize_dist=False, double_filtering=True)
 
-    history_updates = []
-    history_proposals = []
-    
-    touched_tokens = set()
+    #history_updates = []
+    #history_proposals = []
+
+    #touched_tokens = set()
 
     for i in count(0):
         print("Timestep ", game.time_step)
         print("---------------")
         print(game)
 
-        if ask_frequency == 2:
-            example = propose_example(game, oaru, [False], [False], 1, 1)
-        elif ask_frequency == 1:
-            example = propose_example(game, oaru, history_updates, history_proposals, 3, 3)
-        else:
-            example = None
+        #if ask_frequency == 2:
+        #    example = propose_example(game, oaru, [False], [False], 1, 1)
+        #elif ask_frequency == 1:
+        #    example = propose_example(game, oaru, history_updates, history_proposals, 3, 3)
+        #else:
+        #    example = None
 
-        if example is not None:
-            print("Proposing following example...")
-            print(example)
-            negative_example = input("Is it a valid example? (y/n) ") == "n"
-            if negative_example:
-                prev_state = game.get_state()
-                next_state = example.apply(prev_state)
-                assert next_state is not None
-                oaru.add_negative_example(prev_state, next_state)
-                oaru.draw_graph("terminal_demo", filename=f"demo_{i}_neg.gv", view=True)
-                print(f"{len(oaru.action_library)} action(s) after negative example")
+        #if example is not None:
+        #    print("Proposing following example...")
+        #    print(example)
+        #    negative_example = input("Is it a valid example? (y/n) ") == "n"
+        #    if negative_example:
+        #        prev_state = game.get_state()
+        #        next_state = example.apply(prev_state)
+        #        assert next_state is not None
+        #        oaru.add_negative_example(prev_state, next_state)
+        #        oaru.draw_graph("terminal_demo", filename=f"demo_{i}_neg.gv", view=True)
+        #        print(f"{len(oaru.action_library)} action(s) after negative example")
 
         move = input("Next move? ").strip()
         if move == "restart":
             s_prev = game.get_state()
             s_next = game.get_state()
-            s_next.atoms.add(("goal-achieved",))
-            a_g, updated = oaru.action_recognition(s_prev, s_next,
-                    force_filter=ObjectGraphFilter(0, edge_creator, touched_tokens))
+            s_next.atoms.add(GoalAchieved())
+            a_g, updated = oaru.action_recognition(s_prev, s_next)
             seed = seed+1
             game = Game(game_name, seed)
-            touched_tokens = set()
+            #touched_tokens = set()
             continue
         elif move == "quit":
             break
         token, dst = move.split()
-        touched_tokens.add(token)
+        #touched_tokens.add(token)
         s_prev = game.get_state()
         game.pick_and_place(token, dst)
         s_next = game.get_state()
-        a_g, updated = oaru.action_recognition(s_prev, s_next)
+        a_g, updated = oaru.action_recognition(s_prev, s_next, f)
         oaru.draw_graph("terminal_demo", filename=f"demo_{i}.gv", view=True)
         print(f"{len(oaru.action_library)} action(s) after demonstration")
 
-        history_updates.append(updated)
-        history_proposals.append(example is not None)
+        #history_updates.append(updated)
+        #history_proposals.append(example is not None)
         print()
 
 

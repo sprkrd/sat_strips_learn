@@ -1,5 +1,3 @@
-
-
 from .openworld import Action
 from .directed_weighted_graph import DirectedWeightedGraph
 
@@ -40,13 +38,13 @@ class ObjectGraphFilter:
 
     def __call__(self, action):
         object_graph = create_object_graph(action, self.edge_creator)
-        
+
         root_objects = self.root_objects or action.get_referenced_objects(
             sections=["add", "del"])
         object_graph.add_node("root_objects")
         for obj in root_objects:
             object_graph.add_edge("root_objects", obj, 0)
-        
+
         distances = object_graph.dijkstra("root_objects")
         filtered_latoms = []
         for latom in action.atoms:

@@ -187,65 +187,6 @@ def main():
     oaru.add_negative_example(n11, n12)
     oaru.add_negative_example(n21, n22)
     oaru.add_negative_example(n31, n32)
-    a_g, updated = oaru.action_recognition(s0, s1, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s1, s2, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s2, s3, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s3, s4, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s4, s5, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s5, s6, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s6, s7, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s7, s8, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s8, s9, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s9, s10, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s10, s11, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s11, s12, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s12, s13, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s13, s14, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s14, s15, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s15, s16, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s16, s17, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s17, s18, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s18, s19, f)
-    print(a_g, updated)
-
-    a_g, updated = oaru.action_recognition(s19, s20, f)
-    print(a_g, updated)
 
     oaru.draw_graph("output", filename="after_negative_examples", view=True, coarse=False, highlight_last_actions=True, dim_non_updated=True)
 
@@ -256,7 +197,7 @@ def main():
 
     # for a in oaru.action_library.values():
         # print(a.action)
-    
+
     # print(oaru.wall_times)
     # print(oaru.cpu_times)
     # print(oaru.peak_z3_memory)

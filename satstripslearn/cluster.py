@@ -56,7 +56,7 @@ class Cluster:
     def right_parent(self):
         return self.additional_info["right_parent"]
 
-    
+
 
 
 class VariableStorage:
@@ -372,6 +372,6 @@ def cluster(left_parent, right_parent, amo_encoding="quadratic", **options):
     additional_info["sigma_right"] = sigma_right
     additional_info["z3_stats"] = {k.replace(" ","_"): try_parse_number(v) for k,v in o.statistics()}
 
-    new_action = Action("newcluster", atoms=latoms_u)
+    new_action = Action("unnamed", atoms=latoms_u)
 
     return Cluster(new_action, additional_info)

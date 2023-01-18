@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from ..oaru import OaruAlgorithm
+from ..oaru import OaruAlgorithm, equal_libraries
 from ..strips import Predicate, ObjType, ROOT_TYPE
 from ..utils import get_memory_usage
 from ..cluster import Cluster, cluster
@@ -117,8 +117,15 @@ n32 = Context(objects, static_predicates | {At(robot, col_c, row_3)})
 
 def main():
     # f = BasicObjectFilter(directions)
+    z3_opts = {
+            #"amo_encoding": "quadratic",
+            "amo_encoding": "pseudoboolean",
+            #"amo_encoding": "arithmetic",
+            #"maxsat_engine": "wmax",
+            #"optsmt_engine": "symba",
+    }
 
-    oaru = OaruAlgorithm(add_non_novel=False)
+    oaru = OaruAlgorithm(add_non_novel=True, cluster_opts=z3_opts)
 
     f = BasicObjectFilter()
 
@@ -130,6 +137,7 @@ def main():
 
     a_g, updated = oaru.action_recognition(s2, s3, f)
     print(a_g, updated)
+
 
     a_g, updated = oaru.action_recognition(s3, s4, f)
     print(a_g, updated)
@@ -145,6 +153,8 @@ def main():
 
     a_g, updated = oaru.action_recognition(s7, s8, f)
     print(a_g, updated)
+
+    l1 = oaru.action_library.copy()
 
     a_g, updated = oaru.action_recognition(s8, s9, f)
     print(a_g, updated)
@@ -192,8 +202,6 @@ def main():
 
     for op in oaru.history:
         print(op)
-
-
 
     # for a in oaru.action_library.values():
         # print(a.action)

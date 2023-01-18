@@ -257,3 +257,42 @@ class OaruAlgorithm:
             g = draw_cluster_graph(list(self.action_library.values()), **kwargs)
         g.render(outdir+"/"+filename, view=view, cleanup=cleanup, format=format)
 
+
+def count_features(action):
+    feat_count = {}
+    for latom in action.atoms:
+        key = (latom.atom.head,latom.section,latom.certain)
+        count = feat_count.get(key, 0)
+        feat_count[key] = count + 1
+    return feat_count
+
+
+def equal_libraries(lib1, lib2):
+    if len(lib1) != len(lib2):
+        return False
+
+    lib2 = lib2.copy()
+
+    feat_count_lib1 = {a:count_features(a.action) for a in lib1.values()}
+    feat_count_lib2 = {a:count_features(a.action) for a in lib2.values()}
+
+    for a1 in lib1.values():
+        found = None
+        feat_count_a1 = feat_count_lib1[a1]
+        for a2 in lib2.values():
+            if len(a1.action.parameters) != len(a2.action.parameters):
+                continue
+            elif feat_count_a1 != feat_count_lib2[a2]:
+                continue
+            else:
+                c = cluster(a1, a2, amo_encoding="pseudoboolean")
+                if c is None or c.distance > 0:
+                    continue
+            found = a2
+            break
+        if found is None:
+            return False
+        del lib2[a2.name]
+
+    return True
+

@@ -219,7 +219,7 @@ class Action:
                     raise ValueError(f"Variable {arg} is not present in the list of parameters")
 
     def to_strips(self):
-        if self._cached_strips is None: 
+        if self._cached_strips is None:
             name = self.name
             parameters = self.parameters
             precondition = [atom.atom for atom in self.get_atoms_in_section(["pre"], True)]

@@ -208,6 +208,7 @@ class Action:
         else:
             self.parameters = parameters
             self._verify()
+        self._cached_strips = None
 
     def _verify(self):
         for param in self.parameters:
@@ -222,10 +223,11 @@ class Action:
         if self._cached_strips is None:
             name = self.name
             parameters = self.parameters
-            precondition = [atom.atom for atom in self.get_atoms_in_section(["pre"], True)]
-            add_list = [atom.atom for atom in self.get_atoms_in_section(["add"], True)]
-            del_list = [atom.atom for atom in self.get_atoms_in_section(["del"], True)]
-        return StripsAction(name, parameters, precondition, add_list, del_list)
+            precondition = [atom.atom for atom in self.get_atoms_in_section(["pre"], False)]
+            add_list = [atom.atom for atom in self.get_atoms_in_section(["add"], False)]
+            del_list = [atom.atom for atom in self.get_atoms_in_section(["del"], False)]
+            self._cached_strips = StripsAction(name, parameters, precondition, add_list, del_list)
+        return self._cached_strips
 
     def get_atoms_in_section(self, sections=None, include_uncertain=True):
         sections = sections or ACTION_SECTIONS

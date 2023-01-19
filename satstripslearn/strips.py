@@ -597,6 +597,12 @@ class GroundedAction:
             updated_atoms.discard(atom.replace(self.sigma))
         return Context(ctx.objects, updated_atoms)
 
+    def __eq__(self, other):
+        if not isinstance(other, GroundedAction):
+            return NotImplemented
+        return self.schema == other.schema and\
+                self.parameters == other.parameters
+
     def __str__(self):
         return self.schema.name + "(" + ",".join(obj.name for obj in self.parameters) + ")"
 
@@ -611,6 +617,13 @@ class Domain:
         self.predicates = predicates or []
         self.types = types or []
         self.actions = actions or []
+        self._action_index = None
+
+    @property
+    def action_index(self):
+        if self._action_index is None:
+            self._action_index = {a.name.lower():a for a in self.actions}
+        return self._action_index
 
     def copy(self):
         return Domain(self.name, self.predicates.copy(), self.types.copy(), self.actions.copy())
@@ -652,7 +665,7 @@ class Domain:
         if any(predicate.head == other.head for other in self.predicates):
             raise ValueError(f"Predicate with name {predicate.head} already declared")
         if not all(type_ == ROOT_TYPE or type_ in self.types for type_ in predicate.argtypes):
-            raise ValueError
+            raise ValueError("Unknown types in the declaration of the predicate")
 
     def _verify_action(self, action):
         if any(action.name == other.name for other in self.actions):
@@ -692,6 +705,10 @@ class Domain:
             ret = out.getvalue()
         return ret
 
+    def all_groundings(self, ctx):
+        for action in self.actions:
+            yield from action.all_groundings(ctx)
+
     def __str__(self):
         return self.to_pddl()
 
@@ -703,6 +720,13 @@ class Problem:
         self.objects = objects or set()
         self.init = init or set()
         self.goal = goal or set()
+        self._object_index = None
+
+    @property
+    def object_index(self):
+        if self._object_index is None:
+            self._object_index = {o.name.lower(): o for o in self.objects}
+        return self._object_index
 
     def copy(self):
         return Problem(self.name, self.domain.copy(), self.objects.copy(), self.init.copy(), self.goal.copy())

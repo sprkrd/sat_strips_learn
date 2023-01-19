@@ -2,6 +2,7 @@ from .cluster import cluster, Cluster
 from .utils import Timer, get_memory_usage
 from .openworld import Action
 from .viz import draw_cluster_graph, draw_coarse_cluster_graph
+from .strips import Domain
 
 
 def action_from_transition(s, s_next, latom_filter=None):
@@ -134,6 +135,14 @@ class OaruAlgorithm:
 
     def _allows_negative(self, action):
         return any(self._can_produce_transition(action, n) for n in self.negative_examples)
+
+    def strips_domain(self, domain_template):
+        domain = Domain(domain_template.name,
+                domain_template.predicates,
+                domain_template.types)
+        for action in self.action_library.values():
+            domain.add_action(action.action.to_strips())
+        return domain
 
     # def _refactor(self, action, neg_example):
         # unchecked_actions = [action]

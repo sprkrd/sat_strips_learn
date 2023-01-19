@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from ..oaru import OaruAlgorithm, equal_libraries
-from ..strips import Predicate, ObjType, ROOT_TYPE
+from ..strips import Domain, Predicate, ObjType, ROOT_TYPE
 from ..utils import get_memory_usage
 from ..cluster import Cluster, cluster
 from ..latom_filter import BasicObjectFilter, ObjectGraphFilter
@@ -9,15 +9,19 @@ from ..openworld import Context, Action
 
 from pprint import pprint
 
-Column = ObjType("column", ROOT_TYPE)
-Row = ObjType("row", ROOT_TYPE)
-Agent = ObjType("agent", ROOT_TYPE)
 
-Right = Predicate("right", Column, Column)
-Left = Predicate("left", Column, Column)
-Up = Predicate("up", Row, Row)
-Down = Predicate("down", Row, Row)
-At = Predicate("at", Agent, Column, Row)
+domain = Domain("gridworld")
+
+
+Column = domain.declare_type("column")
+Row = domain.declare_type("row")
+Agent = domain.declare_type("agent")
+
+Right = domain.declare_predicate("right", Column, Column)
+Left = domain.declare_predicate("left", Column, Column)
+Up = domain.declare_predicate("up", Row, Row)
+Down = domain.declare_predicate("down", Row, Row)
+At = domain.declare_predicate("at", Agent, Column, Row)
 
 row_1 = Row("1")
 row_2 = Row("2")
@@ -202,6 +206,8 @@ def main():
 
     for op in oaru.history:
         print(op)
+
+    print(oaru.strips_domain(domain))
 
     # for a in oaru.action_library.values():
         # print(a.action)

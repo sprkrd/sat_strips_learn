@@ -1,4 +1,5 @@
 from ..strips import *
+from ..planning import plan, every_optimal_action
 
 dom = Domain("visitall")
 
@@ -37,6 +38,8 @@ prob.add_init_atom(Adjacent(a2, b2))
 prob.add_init_atom(Adjacent(b2, a2))
 prob.add_init_atom(Adjacent(b2, b1))
 
+prob.add_goal_atom(At(robot,b2))
+
 ctx = prob.get_initial_state()
 
 groundings = list(Move.all_groundings(ctx))
@@ -45,3 +48,10 @@ print(groundings)
 print(groundings[0].apply(ctx))
 print(dom)
 print(prob)
+
+for op in plan(prob, cleanup=False):
+    print(op)
+
+print(every_optimal_action(prob, cleanup=False))
+
+input()

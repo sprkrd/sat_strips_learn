@@ -229,10 +229,17 @@ class OaruAlgorithm:
         # op.max_mem = memuse["vmpeak"]
         # self.history.append(op)
 
-    def add_negative_example(self, pre_state, post_state):
+    def add_negative_example(self, *args):
         timer = Timer()
 
-        neg_example = action_from_transition(pre_state, post_state)
+        if len(args) == 2:
+            pre_state, post_state = args
+            neg_example = action_from_transition(pre_state, post_state)
+        elif len(args) == 1:
+            neg_example, = args
+            neg_example = Cluster(neg_example)
+        else:
+            assert(False, "Invalid use of the method")
         neg_example.action.name = f"negative-example-{len(self.negative_examples)+1}"
         self.negative_examples.append(neg_example)
 

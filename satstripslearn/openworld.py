@@ -1,6 +1,6 @@
 from itertools import chain
 
-from .strips import Action as StripsAction, Predicate, _typed_objlist_to_pddl
+from .strips import Action as StripsAction, GroundedAction as StripsGroundedAction, Predicate, _typed_objlist_to_pddl
 from .utils import dict_leq
 
 
@@ -219,6 +219,9 @@ class Action:
                 if arg.is_variable() and arg not in self.parameters:
                     raise ValueError(f"Variable {arg} is not present in the list of parameters")
 
+    def ground(self, parameters):
+        return GroundedAction(self, parameters)
+
     def to_strips(self):
         if self._cached_strips is None:
             name = self.name
@@ -358,6 +361,28 @@ class Action:
                 r"\end{flushleft}"
         ]
         return "\n".join(lines)
+
+
+class GroundedAction:
+    def __init__(self, schema, parameters):
+        self.schema = schema
+        if isinstance(parameters, dict):
+            self.sigma = parameters
+            self.parameters = tuple(parameters[k] for k in schema.parameters)
+        else:
+            self.sigma = dict(zip(schema.parameters, parameters))
+            self.parameters = tuple(parameters)
+
+    def __eq__(self, other):
+        if isinstance(other, GroundedAction):
+            return self.schema is other.schema and self.parameters == other.parameters
+        if isinstance(other, StripsGroundedAction):
+            return str(self) == str(other)
+        return NotImplemented
+
+    def __str__(self):
+        return self.schema.name + "(" + ",".join(obj.name for obj in self.parameters) + ")"
+
 
 if __name__ == "__main__":
     import doctest

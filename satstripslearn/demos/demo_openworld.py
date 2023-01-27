@@ -23,4 +23,14 @@ openworld_action = OpenWorldAction("move",
 
 print(openworld_action)
 
+robot = Agent("robot")
+a4 = Location("a4")
+a3 = Location("a3")
+
+a_g = openworld_action.ground({_agent:robot, _from:a4, _to:a3})
+a_g_strips = openworld_action.to_strips().ground(robot, a4, a3)
+print(a_g)
+print(a_g_strips)
+print(a_g == a_g_strips)
+
 print(openworld_action.to_latex())

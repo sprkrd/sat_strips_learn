@@ -100,14 +100,14 @@ class OaruAlgorithm:
             self._rename(updated_action)
             self.action_library[updated_action.name] = updated_action
             del self.action_library[replaced_action.name]
-            a_g = updated_action.action.replace(sigma)
+            a_g = updated_action.action.ground(sigma)
             library_updated = True
             op.description = f"Action {replaced_action.name} upgraded to {updated_action.name}"
             op.new_actions = [updated_action]
             op.removed_actions = [replaced_action]
         else:
             sigma = updated_action.additional_info["tau"]
-            a_g = replaced_action.action.replace(sigma)
+            a_g = replaced_action.action.ground(sigma)
             op.description = f"No updates, action {replaced_action.name} "\
                              f"already explains the demonstration)"
             op.new_actions = []

@@ -54,7 +54,8 @@ def plan(problem, cleanup=True, timeout=None, bound=None):
     return result
 
 
-def every_optimal_action(problem, cleanup=True, timeout=None):
+def every_optimal_action(problem, cleanup=True, timeout=None,
+        all_groundings=None):
     p = plan(problem, cleanup, timeout)
     if p is None:
         return None
@@ -63,7 +64,9 @@ def every_optimal_action(problem, cleanup=True, timeout=None):
     optimal_length = len(p)
     options = [p[0]]
     initial_state = problem.get_initial_state()
-    for grounding in problem.domain.all_groundings(initial_state):
+    if all_groundings is None:
+        all_groundings = problem.domain.all_groundings(initial_state)
+    for grounding in all_groundings:
         if grounding == options[0]:
             # avoids calling the planner one time
             continue

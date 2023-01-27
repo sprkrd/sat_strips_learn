@@ -373,6 +373,10 @@ class GroundedAction:
             self.sigma = dict(zip(schema.parameters, parameters))
             self.parameters = tuple(parameters)
 
+    def to_strips(self):
+        return StripsGroundedAction(self.schema.to_strips(),
+                self.parameters)
+
     def __eq__(self, other):
         if isinstance(other, GroundedAction):
             return self.schema is other.schema and self.parameters == other.parameters

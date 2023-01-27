@@ -600,8 +600,11 @@ class GroundedAction:
     def __eq__(self, other):
         if not isinstance(other, GroundedAction):
             return NotImplemented
-        return self.schema == other.schema and\
+        return self.schema.name == other.schema.name and\
                 self.parameters == other.parameters
+
+    def __hash__(self):
+        return hash(str(self))
 
     def __str__(self):
         return self.schema.name + "(" + ",".join(obj.name for obj in self.parameters) + ")"

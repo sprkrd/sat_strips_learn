@@ -27,5 +27,4 @@ robot = Agent("robot")
 a4 = Location("a4")
 a3 = Location("a3")
 
-
 print(openworld_action.to_latex())

@@ -1,5 +1,5 @@
 from .openworld import Action
-from .directed_weighted_graph import DirectedWeightedGraph
+from .directed_weighted_graph import DirectedWeightedGraph, INF
 
 
 class BasicObjectFilter:
@@ -48,7 +48,7 @@ class ObjectGraphFilter:
         distances = object_graph.dijkstra("root_objects")
         filtered_latoms = []
         for latom in action.atoms:
-            score = self.fn((distances[arg] for arg in latom.atom.args), default=0)
+            score = self.fn((distances.get(arg, INF) for arg in latom.atom.args), default=0)
             if score <= self.max_distance:
                 filtered_latoms.append(latom)
         return Action(action.name, atoms=filtered_latoms)

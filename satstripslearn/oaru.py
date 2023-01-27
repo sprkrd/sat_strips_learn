@@ -49,7 +49,7 @@ class OaruAlgorithm:
         if not self.history:
             raise IndexError("Empty history, cannot undo last action")
         last_operation = self.history.pop()
-        for action_cluster in last_operation.added_actions:
+        for action_cluster in last_operation.new_actions:
             del self.action_library[action_cluster.name]
         for action_cluster in last_operation.removed_actions:
             self.action_library[action_cluster.name] = action_cluster
@@ -66,7 +66,7 @@ class OaruAlgorithm:
             new_cluster = self._cluster_cache[(a.name, tga.name)]
         except KeyError:
             new_cluster = cluster(a, tga, **self.cluster_opts)
-            if latom_filter is not None and self.double_filtering:
+            if new_cluster is not None and latom_filter is not None and self.double_filtering:
                 new_cluster.action = latom_filter(new_cluster.action)
             self._cluster_cache[(a.name, tga.name)] = new_cluster
         return new_cluster
@@ -78,6 +78,9 @@ class OaruAlgorithm:
         dist_updated = float('inf')
         for a_lib in self.action_library.values():
             new_cluster = self._cluster(a_lib, tga, latom_filter)
+            # if new_cluster is not None and self._allows_negative(new_cluster):
+                # print(a_lib.name, tga.name)
+                # print(new_cluster.action)
             dist_cluster = float('inf') if new_cluster is None else new_cluster.distance
             if dist_cluster < dist_updated and not self._allows_negative(new_cluster):
                 replaced_action = a_lib
@@ -90,7 +93,7 @@ class OaruAlgorithm:
         library_updated = False
         if updated_action is None:
             self.action_library[tga.name] = tga
-            a_g = tga.action
+            a_g = tga.action.ground({})
             library_updated = True
             op.description = f"Added TGA {tga.name}"
             op.new_actions = [tga]
@@ -100,14 +103,14 @@ class OaruAlgorithm:
             self._rename(updated_action)
             self.action_library[updated_action.name] = updated_action
             del self.action_library[replaced_action.name]
-            a_g = updated_action.action.replace(sigma)
+            a_g = updated_action.action.ground(sigma)
             library_updated = True
             op.description = f"Action {replaced_action.name} upgraded to {updated_action.name}"
             op.new_actions = [updated_action]
             op.removed_actions = [replaced_action]
         else:
             sigma = updated_action.additional_info["tau"]
-            a_g = replaced_action.action.replace(sigma)
+            a_g = replaced_action.action.ground(sigma)
             op.description = f"No updates, action {replaced_action.name} "\
                              f"already explains the demonstration)"
             op.new_actions = []
@@ -131,6 +134,9 @@ class OaruAlgorithm:
 
     def _can_produce_transition(self, action, tga):
         updated_action = cluster(action, tga, **self.cluster_opts)
+        # print(action.action)
+        # print("can produce transition")
+        # print(tga.action)
         return updated_action is not None and not updated_action.updates_left()
 
     def _allows_negative(self, action):
@@ -239,7 +245,7 @@ class OaruAlgorithm:
             neg_example, = args
             neg_example = Cluster(neg_example)
         else:
-            assert(False, "Invalid use of the method")
+            assert False, "Invalid use of the method"
         neg_example.action.name = f"negative-example-{len(self.negative_examples)+1}"
         self.negative_examples.append(neg_example)
 

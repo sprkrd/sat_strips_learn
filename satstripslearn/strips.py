@@ -597,11 +597,18 @@ class GroundedAction:
             updated_atoms.discard(atom.replace(self.sigma))
         return Context(ctx.objects, updated_atoms)
 
+    def effect(self):
+        return ({atom.replace(self.sigma) for atom in self.schema.add_list},
+                {atom.replace(self.sigma) for atom in self.schema.del_list})
+
     def __eq__(self, other):
         if not isinstance(other, GroundedAction):
             return NotImplemented
-        return self.schema == other.schema and\
+        return self.schema.name == other.schema.name and\
                 self.parameters == other.parameters
+
+    def __hash__(self):
+        return hash(str(self))
 
     def __str__(self):
         return self.schema.name + "(" + ",".join(obj.name for obj in self.parameters) + ")"

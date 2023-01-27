@@ -50,3 +50,4 @@ class DirectedWeightedGraph:
         for (u,v),w in self.edges.items():
             g.edge(str(u), str(v), label=str(w))
         return g
+

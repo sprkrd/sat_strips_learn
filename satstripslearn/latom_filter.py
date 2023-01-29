@@ -1,3 +1,5 @@
+from itertools import combinations
+
 from .openworld import Action
 from .directed_weighted_graph import DirectedWeightedGraph, INF
 
@@ -54,4 +56,26 @@ class ObjectGraphFilter:
         return Action(action.name, atoms=filtered_latoms)
 
 
+def useless_parameter_filter(action):
+    root_objects = action.get_referenced_objects(sections=["add", "del"])
+    object_graph = DirectedWeightedGraph()
+    for latom in action.atoms:
+        args = latom.atom.args
+        for u, v in combinations(args, 2):
+            object_graph.add_edge(u.name, v.name, 1)
+            object_graph.add_edge(v.name, u.name, 1)
+
+    object_graph.add_node("root_objects")
+    for obj in root_objects:
+        object_graph.add_edge("root_objects", obj.name, 0)
+
+    distances = object_graph.dijkstra("root_objects")
+    filtered_atoms = []
+
+    for latom in action.atoms:
+        score = max((distances.get(arg.name, INF) if arg.is_variable() else 0
+            for arg in latom.atom.ars), default=0)
+        if score < INF:
+            filtered_atoms.append(latom)
+    return Action(action.name, atoms=filtered_atoms)
 

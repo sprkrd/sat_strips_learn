@@ -665,7 +665,7 @@ class Domain:
     def _verify_type(self, type_):
         if type_.name == ROOT_TYPE.name or any(type_.name == other.name for other in self.types):
             raise ValueError(f"Type with name {type_.name} already declared")
-        if type_.parent is not ROOT_TYPE and parent not in self.types:
+        if type_.parent is not ROOT_TYPE and type_.parent not in self.types:
             raise ValueError(f"Parent type {type_.parent} not declared")
 
     def _verify_predicate(self, predicate):

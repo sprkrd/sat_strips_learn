@@ -67,7 +67,7 @@ class OaruAlgorithm:
         except KeyError:
             new_cluster = cluster(a, tga, **self.cluster_opts)
             if new_cluster is not None and double_filtering:
-                new_cluster.action = useless_latom_filter(new_cluster.action)
+                new_cluster.action = useless_parameter_filter(new_cluster.action)
             self._cluster_cache[(a.name, tga.name)] = new_cluster
         return new_cluster
 

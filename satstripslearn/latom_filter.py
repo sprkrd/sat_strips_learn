@@ -74,7 +74,7 @@ def useless_parameter_filter(action):
 
     for latom in action.atoms:
         score = max((distances.get(arg.name, INF) if arg.is_variable() else 0
-            for arg in latom.atom.ars), default=0)
+            for arg in latom.atom.args), default=0)
         if score < INF:
             filtered_atoms.append(latom)
     return Action(action.name, atoms=filtered_atoms)

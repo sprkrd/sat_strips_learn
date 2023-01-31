@@ -429,6 +429,8 @@ def _match_unify(refatom, atom, sigma=None):
     sigma = sigma.copy() if sigma is not None else {}
     for ref_obj, obj in zip(refatom.args, atom.args):
         obj = sigma.get(obj, obj)
+        if not ref_obj.is_compatible(obj):
+            return None
         if obj.is_variable():
             sigma[obj] = ref_obj
         elif obj != ref_obj:

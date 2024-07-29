@@ -442,9 +442,21 @@ class Context:
     def __init__(self, objects, atoms):
         self.objects = objects
         self.atoms = atoms
+        self._hash = None
+
+    def __hash__(self):
+        if self._hash is None:
+            self._hash = hash(frozenset(self.atoms))
+        return self._hash
+
+    def __eq__(self, other):
+        return self.atoms == other.atoms
 
     def __str__(self):
         return " ".join(sorted(map(str, self.atoms)))
+
+
+EMPTY_CTX = Context([], set())
 
 
 class Action:
@@ -499,9 +511,9 @@ class Action:
             variables.update(arg for arg in atom.args if arg.is_variable())
         return variables
 
-    def _all_groundings_aux1(self, state):
+    def _all_groundings_aux1(self, ctx, static_ctx):
         grouped_state = {}
-        for atom in state:
+        for atom in chain(ctx.atoms, static_ctx.atoms):
             grouped_state.setdefault(atom.head, []).append(atom)
         pre = self.precondition
         stack = [(0,{})]
@@ -516,7 +528,7 @@ class Action:
                     sigma_new = _match_unify(refatom, atom, sigma)
                     if sigma_new is not None:
                         stack.append((idx+1,sigma_new))
-            elif atom in state:
+            elif atom in ctx.atoms or atom in static_ctx.atoms:
                 stack.append((idx+1, sigma))
 
     def _all_groundings_aux2(self, objects, sigma0):
@@ -536,21 +548,23 @@ class Action:
                             sigma_new[param] = obj
                             stack.append((param_idx+1,sigma_new))
 
-    def all_groundings(self, ctx):
+    def all_groundings(self, ctx, static_ctx=None):
+        static_ctx = EMPTY_CTX if static_ctx is None else static_ctx
         if self._has_free_parameters:
-            for sigma in self._all_groundings_aux1(ctx.atoms):
+            for sigma in self._all_groundings_aux1(ctx, static_ctx):
                 yield from self._all_groundings_aux2(ctx.objects, sigma)
         else:
-            for sigma in self._all_groundings_aux1(ctx.atoms):
+            for sigma in self._all_groundings_aux1(ctx, static_ctx):
                 yield self.ground(*(sigma[param] for param in self.parameters))
 
-    def ground(self, *parameters):
-        if len(parameters) != self.arity():
-            raise ValueError("Invalid number of parameters")
-        if any(param.is_variable() for param in parameters):
-            raise ValueError("Parameters cannot be free variables")
-        if not all(p1.is_compatible(p2) for p1,p2 in zip(parameters,self.parameters)):
-            raise ValueError("Type mismatch")
+    def ground(self, *parameters, check=True):
+        if check:
+            if len(parameters) != self.arity():
+                raise ValueError("Invalid number of parameters")
+            if any(param.is_variable() for param in parameters):
+                raise ValueError("Parameters cannot be free variables")
+            if not all(p1.is_compatible(p2) for p1,p2 in zip(parameters,self.parameters)):
+                raise ValueError("Type mismatch")
         return GroundedAction(self, parameters)
 
     def to_pddl(self, typing=True):
@@ -585,12 +599,18 @@ class GroundedAction:
         self.parameters = parameters
         self.sigma = dict(zip(schema.parameters, parameters))
 
-    def is_applicable(self, ctx):
+    def is_applicable(self, ctx, static_ctx=None):
+        static_ctx = EMPTY_CTX if static_ctx is None else static_ctx
         precondition = self.schema.precondition
-        return all(atom.replace(self.sigma) in ctx.atoms for atom in precondition)
+        for atom in precondition:
+            atom = atom.replace(self.sigma)
+            if atom not in ctx.atoms and atom not in static_ctx.atoms:
+                return False
+        return True
 
-    def apply(self, ctx):
-        if not self.is_applicable(ctx):
+    def apply(self, ctx, static_ctx=None):
+        static_ctx = EMPTY_CTX if static_ctx is None else static_ctx
+        if not self.is_applicable(ctx, static_ctx):
             return None
         updated_atoms = ctx.atoms.copy()
         for atom in self.schema.add_list:
@@ -664,6 +684,14 @@ class Domain:
         self._verify_action(action)
         self.actions.append(action)
 
+    def get_static_predicates(self):
+        static_predicates = set(pred.head for pred in self.predicates)
+        for action in self.actions:
+            for atom in chain(action.add_list, action.del_list):
+                static_predicates.discard(atom.head)
+        return list(static_predicates)
+        
+
     def _verify_type(self, type_):
         if type_.name == ROOT_TYPE.name or any(type_.name == other.name for other in self.types):
             raise ValueError(f"Type with name {type_.name} already declared")
@@ -714,9 +742,10 @@ class Domain:
             ret = out.getvalue()
         return ret
 
-    def all_groundings(self, ctx):
+    def all_groundings(self, ctx, static_ctx=None):
+        static_ctx = EMPTY_CTX if static_ctx is None else static_ctx
         for action in self.actions:
-            yield from action.all_groundings(ctx)
+            yield from action.all_groundings(ctx, static_ctx)
 
     def __str__(self):
         return self.to_pddl()
@@ -765,7 +794,11 @@ class Problem:
         return atom
 
     def get_initial_state(self):
-        return Context(list(self.objects), self.init)
+        static_predicates = self.domain.get_static_predicates()
+        objects = list(self.objects)
+        ctx = Context(objects, set(atom for atom in self.init if atom.head not in static_predicates))
+        static_ctx = Context(objects, set(atom for atom in self.init if atom.head in static_predicates))
+        return ctx, static_ctx
 
     def dump_pddl(self, out):
         typing = self.domain.types is not None

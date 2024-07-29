@@ -40,12 +40,16 @@ prob.add_init_atom(Adjacent(b2, b1))
 
 prob.add_goal_atom(At(robot,b2))
 
-ctx = prob.get_initial_state()
+ctx, static_ctx = prob.get_initial_state()
 
-groundings = list(Move.all_groundings(ctx))
+print("static predicates:", dom.get_static_predicates())
+print("ctx:", ctx)
+print("static_ctx:", static_ctx)
+
+groundings = list(Move.all_groundings(ctx, static_ctx))
 
 print(groundings)
-print(groundings[0].apply(ctx))
+print(groundings[0].apply(ctx, static_ctx))
 print(dom)
 print(prob)
 

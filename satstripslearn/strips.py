@@ -407,6 +407,7 @@ def _match_unify(refatom, atom, sigma=None):
 
     Examples
     --------
+    
     >>> a = Object("a")
     >>> b = Object("b")
     >>> c = Object("c")
@@ -444,6 +445,9 @@ class Context:
         self.atoms = atoms
         self.static_atoms = set() if static_atoms is None else static_atoms
         self._hash = None
+
+    def satisfies_condition(self, condition):
+        return all(atom in self for atom in condition)
 
     def __hash__(self):
         if self._hash is None:

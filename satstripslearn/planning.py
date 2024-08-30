@@ -54,6 +54,23 @@ def plan(problem, cleanup=True, timeout=None, bound=None):
     return result
 
 
+def solve(problem):
+    initial_state = problem.get_initial_state()
+    max_depth = 1
+    while True:
+        stk = [(0, initial_state)]
+        while stk:
+            depth, state = stk.pop()
+            if state.satisfies_condition(problem.goal):
+                # TODO do something when goal is achieved
+                pass
+            if depth == max_depth:
+                continue
+            for action in problem.domain.all_groundings(state):
+                stk.append((depth+1, action.apply(state)))
+
+
+
 def every_optimal_action(problem, cleanup=True, timeout=None,
         all_groundings=None, max_num_of_actions=1000):
     p = plan(problem, cleanup, timeout)

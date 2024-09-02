@@ -65,3 +65,6 @@ for action in plan:
 plans = solver.find_all_optimum_plans()
 for plan in plans:
     print(plan)
+
+
+print(solver.get_elapsed(), "seconds")

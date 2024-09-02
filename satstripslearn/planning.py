@@ -95,6 +95,9 @@ class Solver:
     def do_iter(self):
         raise NotImplementedError()
 
+    def get_elapsed(self):
+        return self._elapsed
+
 
 class IDSSolver(Solver):
 

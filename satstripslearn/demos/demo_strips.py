@@ -1,5 +1,5 @@
 from ..strips import *
-from ..planning import plan, every_optimal_action
+from ..planning import plan, every_optimal_action, IDSSolver
 
 dom = Domain("visitall")
 
@@ -40,6 +40,8 @@ prob.add_init_atom(Adjacent(b2, b1))
 
 prob.add_goal_atom(At(robot,b2))
 
+
+
 ctx = prob.get_initial_state()
 
 print("static predicates:", dom.get_static_predicates())
@@ -52,9 +54,14 @@ print(groundings[0].apply(ctx))
 print(dom)
 print(prob)
 
-for op in plan(prob, cleanup=False):
-    print(op)
+solver = IDSSolver(prob)
 
-print(every_optimal_action(prob, cleanup=False))
+plan = solver.solve()
 
-input()
+for action in plan:
+    print(action)
+
+
+plans = solver.find_all_optimum_plans()
+for plan in plans:
+    print(plan)

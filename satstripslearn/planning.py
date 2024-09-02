@@ -1,5 +1,7 @@
 import os
 import subprocess
+import time
+import math
 from tempfile import NamedTemporaryFile as TempFile, TemporaryDirectory
 
 from .strips import Problem
@@ -54,21 +56,107 @@ def plan(problem, cleanup=True, timeout=None, bound=None):
     return result
 
 
-def solve(problem):
-    initial_state = problem.get_initial_state()
-    max_depth = 1
-    while True:
-        stk = [(0, initial_state)]
-        while stk:
-            depth, state = stk.pop()
-            if state.satisfies_condition(problem.goal):
-                # TODO do something when goal is achieved
-                pass
-            if depth == max_depth:
-                continue
-            for action in problem.domain.all_groundings(state):
-                stk.append((depth+1, action.apply(state)))
+class Solver:
 
+    def __init__(self, problem, depth_limit=1000, timeout=None):
+        self.problem = problem
+        self.depth_limit = depth_limit
+        self.timeout = math.inf if timeout is None else timeout
+        self._search_end = False
+        self._timeout_triggered = False
+        self._start = None
+        self._elapsed = None
+
+    def find_all_optimum_plans(self):
+        self.setup()
+        plans = []
+        while not self._timeout_triggered and not self._search_end:
+            if self.do_iter():
+                plans.append(self._plan)
+            self._elapsed = time.time() - self._start
+            self._timeout_triggered = self._elapsed >= self.timeout
+        return plans
+
+    def solve(self, timeout=None):
+        self.setup()
+        while not self._timeout_triggered and not self._search_end:
+            if self.do_iter():
+                return self._plan
+            self._elapsed = time.time() - self._start
+            self._timeout_triggered = self._elapsed >= self.timeout
+        return None
+
+    def setup(self):
+        self._start = time.time()
+        self._elapsed = 0
+        self._search_end = False
+        self._timeout_triggered = False
+
+    def do_iter(self):
+        raise NotImplementedError()
+
+
+class IDSSolver(Solver):
+
+    def __init__(self, problem, depth_limit=1000):
+        super().__init__(problem, depth_limit)
+
+    def setup(self):
+        super().setup()
+        initial_state = self.problem.get_initial_state()
+        self._max_depth = 1
+        self._stk = [(0, None, initial_state)]
+        self._running_plan = []
+        self._visited_states = [initial_state]
+
+    def do_iter(self):
+        problem = self.problem
+        stk = self._stk
+        running_plan = self._running_plan
+        visited_states = self._visited_states
+
+        depth, action, state = -1, None, None
+        while stk:
+            depth, action, state = stk.pop()
+            if depth == -1:
+                running_plan.pop()
+                visited_states.pop()
+            else:
+                break
+
+        if depth == -1:
+            if self._max_depth < self.depth_limit:
+                self._max_depth += 1
+                stk.append((0, None, problem.get_initial_state()))
+            else:
+                self._search_end = True
+            return False
+        
+        if action is not None:
+            running_plan.append(action)
+            stk.append((-1, None, None))
+
+            
+        if state.satisfies_condition(problem.goal):
+            self._plan = running_plan.copy()
+            self.depth_limit = depth
+            return True
+
+        if depth >= self._max_depth:
+            return False
+
+        for action in problem.domain.all_groundings(state):
+            next_state = action.apply(state)
+            if next_state not in visited_states:
+                visited_states.append(next_state)
+                stk.append((depth+1, action, action.apply(state)))
+
+        return False
+
+
+class BFSSolver(Solver):
+    # TODO
+    pass
 
 
 def every_optimal_action(problem, cleanup=True, timeout=None,

@@ -299,7 +299,7 @@ def is_suboptimal(problem, a_g, cleanup=True, timeout=None):
     initial_state = problem.get_initial_state()
     ctx = a_g.apply(initial_state)
     modified_problem = Problem(problem.name, problem.domain,
-            problem.objects, ctx.atoms, problem.goal)
+            problem.objects, ctx.atoms|ctx.static_atoms, problem.goal)
     p_alt = plan(modified_problem, cleanup, timeout, bound=len(p))
     if p_alt:
         assert len(p_alt) == len(p) - 1

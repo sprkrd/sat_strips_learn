@@ -1,5 +1,5 @@
 from ..strips import *
-from ..planning import plan, every_optimal_action, IDSSolver, BFSSolver
+from ..planning import plan, every_optimal_action, IDSSolver, BFSSolver, is_suboptimal
 
 # dom = Domain("visitall")
 
@@ -134,15 +134,20 @@ print(groundings[0].apply(ctx))
 print(dom)
 print(prob)
 
-solver = BFSSolver(prob, timeout=60)
+# solver = BFSSolver(prob, timeout=60)
 # solver = IDSSolver(prob)
 
-plan = solver.solve()
+p = plan(prob)
 
-print(solver.get_elapsed(), "seconds")
+# print(solver.get_elapsed(), "seconds")
 
-for action in plan:
+for action in p:
     print(action)
+
+
+suboptimal, alt_action = is_suboptimal(prob, groundings[0])
+
+print(suboptimal, alt_action, groundings[0])
 
 
 # plans = solver.find_all_optimum_plans()
@@ -150,6 +155,6 @@ for action in plan:
     # print(plan)
 
 
-opt_actions = every_optimal_action(prob)
+# opt_actions = every_optimal_action(prob)
 
-print(opt_actions, 60)
+# print(opt_actions, 60)

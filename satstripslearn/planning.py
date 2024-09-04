@@ -10,7 +10,7 @@ from .strips import Problem
 
 
 TEMP_DIR = TemporaryDirectory(prefix="planning_")
-FD_PATH = os.getenv("FD_PATH")
+FD_PATH = os.path.join(os.getenv("FD_PATH"), "fast-downward.py")
 
 
 def plan(problem, cleanup=True, timeout=None, bound=None):
@@ -292,3 +292,16 @@ def every_optimal_action(problem, time_budget=None, method="bfs"):
     # return options, optimal_length
 
 
+def is_suboptimal(problem, a_g, cleanup=True, timeout=None):
+    p = plan(problem, cleanup, timeout)
+    if p is None:
+        return False, a_g
+    initial_state = problem.get_initial_state()
+    ctx = a_g.apply(initial_state)
+    modified_problem = Problem(problem.name, problem.domain,
+            problem.objects, ctx.atoms, problem.goal)
+    p_alt = plan(modified_problem, cleanup, timeout, bound=len(p))
+    if p_alt:
+        assert len(p_alt) == len(p) - 1
+        return False, p[0]
+    return True, p[0]
